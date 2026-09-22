@@ -3,10 +3,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from gemini_service import procesar_mensaje_con_gemini
+from gemini_service import parse_transaction_with_ai
 import json
 
 app = FastAPI(title="Agente Financiero API", version="1.0")
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 class TransactionParseRequest(BaseModel):
     text: str
@@ -71,8 +75,8 @@ def obtener_resumen_financiero(db: Session = Depends(get_db)):
 @app.post("/transactions/process")
 def procesar_y_guardar_transaccion(mensaje: str, db: Session = Depends(get_db)):
     try:
-        # Intentamos procesar con la IA (que ya incluye reintentos)
-        resultado_json_str = procesar_mensaje_con_gemini(mensaje)
+        # Intentamos procesar con la IA
+        resultado_json_str = parse_transaction_with_ai(mensaje)
         datos_transaccion = json.loads(resultado_json_str)
 
         nueva_transaccion = models.Transaction(
@@ -110,7 +114,7 @@ def procesar_y_guardar_transaccion(mensaje: str, db: Session = Depends(get_db)):
 @app.post("/transactions/parse")
 def parsear_transaccion(payload: TransactionParseRequest, db: Session = Depends(get_db)):
     """
-    Procesa una frase en lenguaje natural con Google Gemini, extrae los datos
+    Procesa una frase en lenguaje natural con la IA (Groq/llama), extrae los datos
     de la transacción (monto, tipo, descripción y categoría) y la guarda en
     Supabase para el usuario por defecto (user_id="1").
     """
@@ -118,9 +122,9 @@ def parsear_transaccion(payload: TransactionParseRequest, db: Session = Depends(
     categorias = db.query(models.Category).filter(models.Category.is_active == True).all()
     categorias_por_nombre = {c.name.strip().lower(): c.id for c in categorias}
 
-    # 2. Pedir a Gemini que extraiga la información estructurada
+    # 2. Pedir a la IA que extraiga la información estructurada
     try:
-        resultado_json_str = procesar_mensaje_con_gemini(payload.text)
+        resultado_json_str = parse_transaction_with_ai(payload.text)
         datos = json.loads(resultado_json_str)
     except Exception as e:
         db.rollback()

@@ -1,40 +1,36 @@
 import os
-import time
-import requests
-from dotenv import load_dotenv
+from groq import Groq
 
-load_dotenv()
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-URL_API = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
-
-def procesar_mensaje_con_gemini(mensaje_usuario: str, max_intentos: int = 3):
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": f"Analiza el siguiente mensaje y extrae la información solicitada: \"{mensaje_usuario}\""}]}],
-        "systemInstruction": {
-            "parts": [{"text": "Eres un asistente financiero. Devuelve estrictamente un JSON con: type (gasto/ingreso), amount (número), currency (CLP), merchant (opcional), category_id (1 a 7) y description (opcional)."}]
-        },
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "temperature": 0.1
-        }
-    }
-
-    ultimo_error = None
-    for intento in range(1, max_intentos + 1):
-        try:
-            response = requests.post(URL_API, headers=headers, json=payload, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-            else:
-                ultimo_error = f"Error HTTP {response.status_code}: {response.text}"
-        except Exception as e:
-            ultimo_error = str(e)
-        
-        # Si falla, espera antes del siguiente intento (2s, luego 4s)
-        if intento < max_intentos:
-            time.sleep(intento * 2)
-
-    raise Exception(f"Fallo tras {max_intentos} intentos. Último error: {ultimo_error}")
+def parse_transaction_with_ai(text: str):
+    completion = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Eres un asistente financiero experto. Extrae la información de la transacción "
+                    "y respóndela estrictamente en formato JSON con estas claves exactas:\n"
+                    '- "type": obligatorio, SOLO "gasto" o "ingreso" (en español, minúsculas)\n'
+                    '- "amount": obligatorio, número positivo sin símbolos ni separadores\n'
+                    '- "currency": siempre "CLP"\n'
+                    '- "merchant": string o null (local o comercio mencionado)\n'
+                    '- "category_id": entero o null (usa estos IDs si reconoces la categoría: '
+                    '1=Alimentación, 2=Transporte, 3=Ocio y Entretenimiento, 4=Hogar, 5=Feria, '
+                    '6=Salud, 7=Sin Categorizar, 8=Servicios, 9=Vestuario, 10=Educación, '
+                    '11=Inversiones, 12=Sueldo y Salario, 13=Freelance, 14=Regalos, '
+                    '15=Viajes, 16=Mascotas, 17=Deporte)\n'
+                    '- "description": string corto y descriptivo en español\n'
+                    "No incluyas ningún texto fuera del JSON."
+                )
+            },
+            {
+                "role": "user",
+                "content": text
+            }
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.1
+    )
+    return completion.choices[0].message.content

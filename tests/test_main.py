@@ -68,26 +68,26 @@ def client(db_session):
 
 
 @pytest.fixture()
-def fake_gemini(monkeypatch):
+def fake_ai(monkeypatch):
     """
-    Simula `procesar_mensaje_con_gemini` reemplazándolo en el módulo main.
+    Simula `parse_transaction_with_ai` reemplazándolo en el módulo main.
 
     Uso:
-        fake_gemini({"type": "gasto", "amount": 1000})  -> devuelve ese JSON
-        fake_gemini(Exception("IA caída"))               -> lanza la excepción
+        fake_ai({"type": "gasto", "amount": 1000})  -> devuelve ese JSON
+        fake_ai(Exception("IA caída"))               -> lanza la excepción
     """
 
     def _install(result):
         if isinstance(result, Exception):
-            def _raise(_mensaje, **_kwargs):
+            def _raise(_texto, **_kwargs):
                 raise result
-            monkeypatch.setattr(main, "procesar_mensaje_con_gemini", _raise)
+            monkeypatch.setattr(main, "parse_transaction_with_ai", _raise)
         else:
             payload = json.dumps(result)
 
-            def _return(_mensaje, **_kwargs):
+            def _return(_texto, **_kwargs):
                 return payload
-            monkeypatch.setattr(main, "procesar_mensaje_con_gemini", _return)
+            monkeypatch.setattr(main, "parse_transaction_with_ai", _return)
 
     return _install
 
@@ -325,9 +325,9 @@ class TestTransactionsSummary:
 
 class TestParseTransaction:
 
-    def test_parse_success_saves_transaction(self, client, db_session, fake_gemini):
+    def test_parse_success_saves_transaction(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini({
+        fake_ai({
             "type": "gasto",
             "amount": 15000,
             "currency": "CLP",
@@ -364,9 +364,9 @@ class TestParseTransaction:
         assert len(guardadas) == 1
         assert guardadas[0].user_id == "1"
 
-    def test_parse_with_category_id_from_ai(self, client, db_session, fake_gemini):
+    def test_parse_with_category_id_from_ai(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini({
+        fake_ai({
             "type": "ingreso",
             "amount": 50000,
             "category_id": 12,
@@ -383,9 +383,9 @@ class TestParseTransaction:
         assert data["extracted_data"]["category_id"] == 12
         assert float(data["extracted_data"]["amount"]) == 50000.0
 
-    def test_parse_unknown_category_defaults_to_7(self, client, db_session, fake_gemini):
+    def test_parse_unknown_category_defaults_to_7(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini({
+        fake_ai({
             "type": "gasto",
             "amount": 990,
             "category": "Categoría Inexistente",
@@ -398,9 +398,9 @@ class TestParseTransaction:
         assert response.status_code == 200
         assert response.json()["extracted_data"]["category_id"] == 7
 
-    def test_parse_invalid_type_returns_422(self, client, db_session, fake_gemini):
+    def test_parse_invalid_type_returns_422(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini({"type": "ahorro", "amount": 1000})
+        fake_ai({"type": "ahorro", "amount": 1000})
 
         response = client.post(
             "/transactions/parse",
@@ -409,9 +409,9 @@ class TestParseTransaction:
         assert response.status_code == 422
         assert "ahorro" in response.json()["detail"]
 
-    def test_parse_missing_amount_returns_422(self, client, db_session, fake_gemini):
+    def test_parse_missing_amount_returns_422(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini({"type": "gasto", "description": "sin monto"})
+        fake_ai({"type": "gasto", "description": "sin monto"})
 
         response = client.post(
             "/transactions/parse",
@@ -423,9 +423,9 @@ class TestParseTransaction:
         # No debe haber guardado nada
         assert db_session.query(models.Transaction).count() == 0
 
-    def test_parse_ai_failure_returns_502(self, client, db_session, fake_gemini):
+    def test_parse_ai_failure_returns_502(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_gemini(Exception("Fallo tras 3 intentos"))
+        fake_ai(Exception("Fallo tras 3 intentos"))
 
         response = client.post(
             "/transactions/parse",
