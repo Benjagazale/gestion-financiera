@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 from gemini_service import parse_transaction_with_ai
+from supabase_service import calculate_financial_summary
 import json
 
 app = FastAPI(title="Agente Financiero API", version="1.0")
@@ -40,21 +41,9 @@ def listar_transacciones(
 
 @app.get("/transactions/summary")
 def obtener_resumen_financiero(db: Session = Depends(get_db)):
-    from decimal import Decimal
-    
-    # Filtrar transacciones del usuario por defecto (user_id="1")
-    transacciones_usuario = db.query(models.Transaction).filter(models.Transaction.user_id == "1").all()
-    
-    total_ingresos = sum([t.amount for t in transacciones_usuario if t.type == "ingreso"], Decimal('0'))
-    total_gastos = sum([t.amount for t in transacciones_usuario if t.type == "gasto"], Decimal('0'))
-    saldo_neto = total_ingresos - total_gastos
-
-    # Devolver exactamente el formato requerido: {"income": ..., "expenses": ..., "balance": ...}
-    return {
-        "income": float(total_ingresos),
-        "expenses": float(total_gastos),
-        "balance": float(saldo_neto)
-    }
+    """Retorna el resumen financiero calculado desde Supabase:
+    {"income": ..., "expenses": ..., "balance": ...}"""
+    return calculate_financial_summary(db)
 
 @app.post("/transactions/process")
 def procesar_y_guardar_transaccion(mensaje: str, db: Session = Depends(get_db)):
