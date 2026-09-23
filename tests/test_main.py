@@ -256,10 +256,10 @@ class TestTransactionsSummary:
         assert response.status_code == 200
 
         data = response.json()
-        assert float(data["total_ingresos"]) == 0.0
-        assert float(data["total_gastos"]) == 0.0
-        assert float(data["saldo_neto"]) == 0.0
-        assert data["desglose_por_categoria"] == {}
+        assert set(data.keys()) == {"income", "expenses", "balance"}
+        assert float(data["income"]) == 0.0
+        assert float(data["expenses"]) == 0.0
+        assert float(data["balance"]) == 0.0
 
     def test_summary_totals_and_net_balance(self, client, db_session):
         seed_categories(db_session)
@@ -274,11 +274,10 @@ class TestTransactionsSummary:
         assert response.status_code == 200
 
         data = response.json()
-        assert float(data["total_ingresos"]) == pytest.approx(60000.0)
-        assert float(data["total_gastos"]) == pytest.approx(5000.0)
-        # Saldo neto = ingresos - gastos
-        assert float(data["saldo_neto"]) == pytest.approx(55000.0)
-        assert data["user_id"] == 1
+        assert float(data["income"]) == pytest.approx(60000.0)
+        assert float(data["expenses"]) == pytest.approx(5000.0)
+        # balance = ingresos - gastos
+        assert float(data["balance"]) == pytest.approx(55000.0)
 
     def test_summary_negative_balance(self, client, db_session):
         seed_categories(db_session)
@@ -286,9 +285,9 @@ class TestTransactionsSummary:
         seed_transaction(db_session, type="gasto", amount=3500, category_id=1)
 
         data = client.get("/transactions/summary").json()
-        assert float(data["saldo_neto"]) == pytest.approx(-2500.0)
+        assert float(data["balance"]) == pytest.approx(-2500.0)
 
-    def test_summary_breakdown_by_category(self, client, db_session):
+    def test_summary_sums_types_independently(self, client, db_session):
         seed_categories(db_session)
         seed_transaction(db_session, type="gasto", amount=3500, category_id=1)
         seed_transaction(db_session, type="gasto", amount=1500, category_id=1)
@@ -297,16 +296,11 @@ class TestTransactionsSummary:
 
         response = client.get("/transactions/summary")
         assert response.status_code == 200
-        desglose = response.json()["desglose_por_categoria"]
 
-        assert float(desglose["Alimentación"]["gastos"]) == pytest.approx(5000.0)
-        assert float(desglose["Alimentación"]["ingresos"]) == 0.0
-        assert desglose["Alimentación"]["category_id"] == 1
-
-        assert float(desglose["Transporte"]["gastos"]) == pytest.approx(2500.0)
-
-        assert float(desglose["Sueldo y Salario"]["ingresos"]) == pytest.approx(50000.0)
-        assert float(desglose["Sueldo y Salario"]["gastos"]) == 0.0
+        data = response.json()
+        assert float(data["expenses"]) == pytest.approx(7500.0)
+        assert float(data["income"]) == pytest.approx(50000.0)
+        assert float(data["balance"]) == pytest.approx(42500.0)
 
     def test_summary_ignores_other_users(self, client, db_session):
         seed_categories(db_session)
@@ -315,8 +309,8 @@ class TestTransactionsSummary:
         seed_transaction(db_session, type="ingreso", amount=88888, user_id="2")
 
         data = client.get("/transactions/summary").json()
-        assert float(data["total_gastos"]) == pytest.approx(1000.0)
-        assert float(data["total_ingresos"]) == pytest.approx(0.0)
+        assert float(data["expenses"]) == pytest.approx(1000.0)
+        assert float(data["income"]) == pytest.approx(0.0)
 
 
 # ===========================================================================

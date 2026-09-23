@@ -48,28 +48,12 @@ def obtener_resumen_financiero(db: Session = Depends(get_db)):
     total_ingresos = sum([t.amount for t in transacciones_usuario if t.type == "ingreso"], Decimal('0'))
     total_gastos = sum([t.amount for t in transacciones_usuario if t.type == "gasto"], Decimal('0'))
     saldo_neto = total_ingresos - total_gastos
-    
-    # Desglose por categoría
-    categorias = {c.id: c.name for c in db.query(models.Category).all()}
-    desglose_categorias = {}
-    
-    for t in transacciones_usuario:
-        cat_id = t.category_id
-        cat_name = categorias.get(cat_id, "Desconocida")
-        if cat_name not in desglose_categorias:
-            desglose_categorias[cat_name] = {"category_id": cat_id, "ingresos": 0.0, "gastos": 0.0}
-        
-        if t.type == "ingreso":
-            desglose_categorias[cat_name]["ingresos"] += float(t.amount)
-        elif t.type == "gasto":
-            desglose_categorias[cat_name]["gastos"] += float(t.amount)
 
+    # Devolver exactamente el formato requerido: {"income": ..., "expenses": ..., "balance": ...}
     return {
-        "user_id": 1,
-        "total_ingresos": float(total_ingresos),
-        "total_gastos": float(total_gastos),
-        "saldo_neto": float(saldo_neto),
-        "desglose_por_categoria": desglose_categorias
+        "income": float(total_ingresos),
+        "expenses": float(total_gastos),
+        "balance": float(saldo_neto)
     }
 
 @app.post("/transactions/process")
