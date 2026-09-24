@@ -184,7 +184,10 @@ class TestHealthAndContract:
     def test_health_returns_envelope(self, client):
         response = client.get("/health")
         assert response.status_code == 200
-        assert data_of(response) == {"status": "ok"}
+        data = data_of(response)
+        assert data["status"] == "ok"
+        # Sin API_KEY configurada (modo dev) el flag expone que está abierto
+        assert data["api_key_configured"] is False
 
     def test_404_uses_error_envelope(self, client):
         response = client.get("/ruta-inexistente")
@@ -751,6 +754,8 @@ class TestSecurity:
         monkeypatch.setattr(app_config.settings, "api_key", "clave-secreta-123")
         response = client.get("/health")
         assert response.status_code == 200
+        # El health sigue exento, pero reporta que la auth está activa
+        assert data_of(response)["api_key_configured"] is True
 
     def test_rate_limit_returns_429(self, client, db_session, fake_ai, monkeypatch):
         monkeypatch.setattr(app_config.settings, "parse_rate_limit", 2)

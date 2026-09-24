@@ -29,4 +29,9 @@ app.include_router(transactions_router)
 
 @app.get("/health", response_model=Envelope)
 def health_check():
-    return envelope({"status": "ok"})
+    """Healthcheck público (exento de API key).
+
+    `api_key_configured` permite verificar a distancia si la variable
+    API_KEY llegó al proceso (no expone el valor, solo true/false).
+    """
+    return envelope({"status": "ok", "api_key_configured": bool(settings.api_key)})
