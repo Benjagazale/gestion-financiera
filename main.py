@@ -1,139 +1,155 @@
-from fastapi import FastAPI, Depends, HTTPException
-from pydantic import BaseModel
+"""Agente Financiero API — capa de rutas delgada (solo HTTP + Depends).
+
+Lógica de negocio en services/, contratos en schemas/, infra en core/.
+"""
+import json
+import logging
+from datetime import date
+from typing import Literal, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+
+from core.config import settings
+from core.errors import register_error_handlers
+from core.rate_limit import rate_limit
+from core.security import require_api_key
 from database import get_db
 import models
-from gemini_service import parse_transaction_with_ai
-from supabase_service import calculate_financial_summary
-import json
+from schemas.response import Envelope, envelope
+from schemas.transaction import (
+    CategoryOut,
+    ParseData,
+    ProcessRequest,
+    TransactionOut,
+    TransactionParseRequest,
+)
+from services.ai_service import parse_transaction_with_ai
+from services.summary_service import calculate_financial_summary
 
-app = FastAPI(title="Agente Financiero API", version="1.0")
+logger = logging.getLogger("agente")
 
-@app.get("/health")
+app = FastAPI(title="Agente Financiero API", version="2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+register_error_handlers(app)
+
+AUTH = [Depends(require_api_key)]
+
+
+@app.get("/health", response_model=Envelope)
 def health_check():
-    return {"status": "ok"}
+    return envelope({"status": "ok"})
 
-class TransactionParseRequest(BaseModel):
-    text: str
 
-@app.get("/categories")
+@app.get("/categories", response_model=Envelope, dependencies=AUTH)
 def listar_categorias(db: Session = Depends(get_db)):
-    return db.query(models.Category).all()
+    categorias = db.query(models.Category).all()
+    return envelope([CategoryOut.model_validate(c).model_dump(mode="json") for c in categorias])
 
-@app.get("/transactions")
+
+@app.get("/transactions", response_model=Envelope, dependencies=AUTH)
 def listar_transacciones(
-    skip: int = 0,
-    limit: int = 100,
-    type: str = None,
-    category_id: int = None,
-    db: Session = Depends(get_db)
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    type: Optional[Literal["gasto", "ingreso"]] = None,
+    category_id: Optional[int] = Query(None, ge=1),
+    db: Session = Depends(get_db),
 ):
-    query = db.query(models.Transaction).filter(models.Transaction.user_id == "1")
-    
+    query = db.query(models.Transaction).filter(
+        models.Transaction.user_id == settings.default_user_id
+    )
+
     if type is not None:
         query = query.filter(models.Transaction.type == type)
-        
+
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
-        
-    transactions = query.offset(skip).limit(limit).all()
-    return transactions
 
-@app.get("/transactions/summary")
-def obtener_resumen_financiero(db: Session = Depends(get_db)):
-    """Retorna el resumen financiero calculado desde Supabase:
-    {"income": ..., "expenses": ..., "balance": ...}"""
-    return calculate_financial_summary(db)
+    transacciones = query.order_by(models.Transaction.id).offset(skip).limit(limit).all()
+    return envelope([TransactionOut.model_validate(t).model_dump(mode="json") for t in transacciones])
 
-@app.post("/transactions/process")
-def procesar_y_guardar_transaccion(mensaje: str, db: Session = Depends(get_db)):
-    try:
-        # Intentamos procesar con la IA
-        resultado_json_str = parse_transaction_with_ai(mensaje)
-        datos_transaccion = json.loads(resultado_json_str)
 
-        nueva_transaccion = models.Transaction(
-            user_id=1, # ID temporal por defecto.
-            type=datos_transaccion.get("type"),
-            amount=datos_transaccion.get("amount"),
-            currency=datos_transaccion.get("currency", "CLP"),
-            merchant=datos_transaccion.get("merchant"),
-            category_id=datos_transaccion.get("category_id"),
-            description=datos_transaccion.get("description")
-        )
+@app.get("/transactions/summary", response_model=Envelope, dependencies=AUTH)
+def obtener_resumen_financiero(
+    fecha_desde: Optional[date] = Query(None, alias="from"),
+    fecha_hasta: Optional[date] = Query(None, alias="to"),
+    db: Session = Depends(get_db),
+):
+    """Resumen financiero vía agregación SQL. Filtros de fecha opcionales
+    en calendario Chile (?from=YYYY-MM-DD&to=YYYY-MM-DD)."""
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=422, detail="'from' no puede ser posterior a 'to'")
 
-        db.add(nueva_transaccion)
-        db.commit()
-        db.refresh(nueva_transaccion)
+    resumen = calculate_financial_summary(
+        db,
+        user_id=settings.default_user_id,
+        date_from=fecha_desde,
+        date_to=fecha_hasta,
+    )
+    return envelope(resumen)
 
-        return {
-            "status": "success",
-            "message": "Transacción procesada y guardada con éxito por la IA.",
-            "data": nueva_transaccion
-        }
-    
-    except Exception as e:
-        db.rollback()
-        # Capa de Respaldo (Fallback): Si la IA no responde, devolvemos guía y las categorías
-        categorias = db.query(models.Category).all()
-        return {
-            "status": "fallback_required",
-            "message": "Los servidores de IA están ocupados temporalmente. Por favor, utiliza el registro estructurado manual.",
-            "error_detallado": str(e),
-            "categorias_disponibles": [{"id": c.id, "nombre": c.name} for c in categorias],
-            "instruccion": "Envía los datos mediante el endpoint manual de creación de transacciones especificando el ID de categoría."
-        }
 
-@app.post("/transactions/parse")
-def parsear_transaccion(payload: TransactionParseRequest, db: Session = Depends(get_db)):
-    """
-    Procesa una frase en lenguaje natural con la IA (Groq/llama), extrae los datos
-    de la transacción (monto, tipo, descripción y categoría) y la guarda en
-    Supabase para el usuario por defecto (user_id="1").
-    """
-    # 1. Consultar categorías para poder resolver nombres de categoría a IDs
+def _extraer_y_guardar(texto: str, db: Session) -> dict:
+    """Flujo compartido por /parse y /process: IA → validar → persistir."""
+    # 1. Categorías activas (para inyectar al prompt y resolver nombres → IDs)
     categorias = db.query(models.Category).filter(models.Category.is_active == True).all()
     categorias_por_nombre = {c.name.strip().lower(): c.id for c in categorias}
+    cats_prompt = [{"id": c.id, "name": c.name} for c in categorias]
 
-    # 2. Pedir a la IA que extraiga la información estructurada
+    # 2. Extracción con IA (timeout + fallback de modelo + schema validation)
     try:
-        resultado_json_str = parse_transaction_with_ai(payload.text)
+        resultado_json_str = parse_transaction_with_ai(texto, categorias=cats_prompt)
         datos = json.loads(resultado_json_str)
     except Exception as e:
-        db.rollback()
+        logger.error("Fallo del servicio de IA: %s", e)
         raise HTTPException(
-            status_code=502,
-            detail=f"No se pudo procesar el texto con la IA: {str(e)}"
+            status_code=503,
+            detail="El servicio de IA no está disponible temporalmente. Reintenta en unos segundos.",
+            headers={"Retry-After": "30"},
         )
 
-    # 3. Validar y normalizar los datos extraídos
+    # 3. Validación defensiva de los datos extraídos
     monto = datos.get("amount")
     tipo = str(datos.get("type", "")).strip().lower()
 
     if monto is None:
         raise HTTPException(status_code=422, detail="La IA no pudo extraer un monto válido del texto.")
     if tipo not in ("gasto", "ingreso"):
-        raise HTTPException(status_code=422, detail=f"Tipo inválido extraído por la IA: '{tipo}'. Debe ser 'gasto' o 'ingreso'.")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Tipo inválido extraído por la IA: '{tipo}'. Debe ser 'gasto' o 'ingreso'.",
+        )
 
-    # 4. Resolver la categoría: la IA puede devolver category_id (int) o category (str)
+    # 4. Resolver categoría: ID de la IA → nombre → default 7 ("Sin Categorizar")
     category_id = datos.get("category_id")
     category_nombre = datos.get("category")
 
     if category_id is None and category_nombre:
         category_id = categorias_por_nombre.get(str(category_nombre).strip().lower())
-
     if category_id is None:
-        category_id = 7  # "Sin Categorizar" / valor por defecto del modelo
+        category_id = 7
+    try:
+        category_id = int(category_id)
+    except (TypeError, ValueError):
+        category_id = 7
 
-    # 5. Guardar la transacción en Supabase
+    # 5. Persistir (user_id SIEMPRE string desde settings, nunca int del body)
     nueva_transaccion = models.Transaction(
-        user_id="1",  # Usuario por defecto
+        user_id=settings.default_user_id,
         type=tipo,
         amount=float(monto),
         currency=datos.get("currency", "CLP"),
         merchant=datos.get("merchant"),
-        category_id=int(category_id),
-        description=datos.get("description") or payload.text
+        category_id=category_id,
+        description=datos.get("description") or texto,
     )
 
     try:
@@ -142,19 +158,38 @@ def parsear_transaccion(payload: TransactionParseRequest, db: Session = Depends(
         db.refresh(nueva_transaccion)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al guardar la transacción: {str(e)}")
+        logger.error("Error al guardar la transacción: %s", e)
+        raise HTTPException(status_code=500, detail="Error al guardar la transacción.")
 
-    return {
-        "status": "success",
-        "message": "Transacción extraída por IA y guardada con éxito en la base de datos.",
-        "extracted_data": {
+    return ParseData(
+        extracted_data={
             "amount": float(monto),
             "type": tipo,
-            "description": datos.get("description") or payload.text,
-            "category_id": int(category_id),
-            "category_name": next((c.name for c in categorias if c.id == int(category_id)), None),
+            "description": datos.get("description") or texto,
+            "category_id": category_id,
+            "category_name": next((c.name for c in categorias if c.id == category_id), None),
             "currency": datos.get("currency", "CLP"),
-            "merchant": datos.get("merchant")
+            "merchant": datos.get("merchant"),
         },
-        "transaction": nueva_transaccion
-    }
+        transaction=TransactionOut.model_validate(nueva_transaccion),
+    ).model_dump(mode="json")
+
+
+@app.post(
+    "/transactions/parse",
+    response_model=Envelope,
+    dependencies=AUTH + [Depends(rate_limit("parse"))],
+)
+def parsear_transaccion(payload: TransactionParseRequest, db: Session = Depends(get_db)):
+    """Extrae una transacción de lenguaje natural con IA y la guarda."""
+    return envelope(_extraer_y_guardar(payload.text, db))
+
+
+@app.post(
+    "/transactions/process",
+    response_model=Envelope,
+    dependencies=AUTH + [Depends(rate_limit("process"))],
+)
+def procesar_y_guardar_transaccion(payload: ProcessRequest, db: Session = Depends(get_db)):
+    """Alias histórico de /parse (body: {"mensaje": "..."})."""
+    return envelope(_extraer_y_guardar(payload.mensaje, db))

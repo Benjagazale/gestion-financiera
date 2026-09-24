@@ -1,20 +1,28 @@
 """
-Pruebas unitarias para los endpoints del Agente Financiero API.
+Pruebas unitarias para los endpoints del Agente Financiero API (v2).
 
 Estrategia de aislamiento de base de datos:
 - Se crea una base de datos SQLite en memoria por prueba.
 - Se sobreescribe la dependencia `get_db` de FastAPI para que los endpoints
   usen esa sesión de prueba en lugar de la sesión conectada a Supabase.
 
+Contrato v2 verificado:
+- Éxito:  {"data": ..., "meta": {"request_id": ...}}
+- Error:  {"error": {"code": ..., "message": ...}}
+
 Endpoints cubiertos:
-- GET  /transactions        (paginación y filtros)
-- GET  /transactions/summary (ingresos, gastos, saldo neto y desglose)
-- POST /transactions/parse   (procesamiento de texto con IA simulada)
+- GET    /health
+- GET    /transactions          (paginación y filtros)
+- GET    /transactions/summary  (income/expenses/balance + filtros de fecha)
+- POST   /transactions/parse    (IA simulada, idempotencia de errores)
+- POST   /transactions/process  (alias histórico)
+- Seguridad: API key y rate limiting
 """
 
 import json
 import os
 import sys
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,14 +33,26 @@ from sqlalchemy.pool import StaticPool
 # La raíz del proyecto debe estar en sys.path para poder importar `main`
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import core.config as app_config
 import main
 import models
+from core import rate_limit as rate_limit_mod
 from database import Base, get_db
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _aislar_estado_global(monkeypatch):
+    """Rate limit generoso + buckets limpios para que las pruebas no interfieran."""
+    monkeypatch.setattr(app_config.settings, "parse_rate_limit", 10_000)
+    monkeypatch.setattr(app_config.settings, "api_key", None)  # auth off por defecto
+    rate_limit_mod.limpiar_buckets()
+    yield
+    rate_limit_mod.limpiar_buckets()
+
 
 @pytest.fixture()
 def db_session():
@@ -92,6 +112,22 @@ def fake_ai(monkeypatch):
     return _install
 
 
+def data_of(response):
+    """Extrae `data` del envelope y valida la forma de la respuesta exitosa."""
+    body = response.json()
+    assert "data" in body, f"Falta 'data' en la respuesta: {body}"
+    assert "request_id" in body.get("meta", {}), f"Falta meta.request_id: {body}"
+    return body["data"]
+
+
+def error_of(response):
+    """Extrae `error` del envelope de error y valida su forma."""
+    body = response.json()
+    assert "error" in body, f"Falta 'error' en la respuesta: {body}"
+    assert "code" in body["error"] and "message" in body["error"]
+    return body["error"]
+
+
 # ---------------------------------------------------------------------------
 # Helpers de seeding
 # ---------------------------------------------------------------------------
@@ -109,9 +145,9 @@ def seed_categories(session):
 
 
 def seed_transaction(session, *, type, amount, category_id=1,
-                     user_id="1", description=""):
+                     user_id="1", description="", transaction_date=None):
     """Inserta una transacción de prueba y la devuelve refrescada."""
-    transaccion = models.Transaction(
+    campos = dict(
         user_id=user_id,
         type=type,
         amount=amount,
@@ -119,10 +155,36 @@ def seed_transaction(session, *, type, amount, category_id=1,
         category_id=category_id,
         description=description,
     )
+    if transaction_date is not None:
+        campos["transaction_date"] = transaction_date
+    transaccion = models.Transaction(**campos)
     session.add(transaccion)
     session.commit()
     session.refresh(transaccion)
     return transaccion
+
+
+# ===========================================================================
+# 0. GET /health + contrato de errores
+# ===========================================================================
+
+class TestHealthAndContract:
+
+    def test_health_returns_envelope(self, client):
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert data_of(response) == {"status": "ok"}
+
+    def test_404_uses_error_envelope(self, client):
+        response = client.get("/ruta-inexistente")
+        assert response.status_code == 404
+        error = error_of(response)
+        assert error["code"] == "NOT_FOUND"
+
+    def test_validation_error_uses_error_envelope(self, client):
+        response = client.post("/transactions/parse", json={})
+        assert response.status_code == 422
+        assert error_of(response)["code"] == "VALIDATION_ERROR"
 
 
 # ===========================================================================
@@ -139,7 +201,7 @@ class TestListTransactions:
         response = client.get("/transactions")
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert len(data) == 1
         assert all(t["user_id"] == "1" for t in data)
 
@@ -151,16 +213,16 @@ class TestListTransactions:
         response = client.get("/transactions")
         assert response.status_code == 200
         # Por defecto: skip=0, limit=100 -> las 5 transacciones
-        assert len(response.json()) == 5
+        assert len(data_of(response)) == 5
 
     def test_skip_and_limit_partition_results(self, client, db_session):
         seed_categories(db_session)
         for i in range(5):
             seed_transaction(db_session, type="gasto", amount=100 * (i + 1))
 
-        page1 = client.get("/transactions", params={"skip": 0, "limit": 2}).json()
-        page2 = client.get("/transactions", params={"skip": 2, "limit": 2}).json()
-        page3 = client.get("/transactions", params={"skip": 4, "limit": 2}).json()
+        page1 = data_of(client.get("/transactions", params={"skip": 0, "limit": 2}))
+        page2 = data_of(client.get("/transactions", params={"skip": 2, "limit": 2}))
+        page3 = data_of(client.get("/transactions", params={"skip": 4, "limit": 2}))
 
         assert len(page1) == 2
         assert len(page2) == 2
@@ -175,7 +237,8 @@ class TestListTransactions:
         assert ids2.isdisjoint(ids3)
 
         # La unión de las páginas son las 5 transacciones
-        assert ids1 | ids2 | ids3 == {t["id"] for t in client.get("/transactions").json()}
+        todos = {t["id"] for t in data_of(client.get("/transactions"))}
+        assert ids1 | ids2 | ids3 == todos
 
     def test_skip_beyond_total_returns_empty(self, client, db_session):
         seed_categories(db_session)
@@ -183,7 +246,7 @@ class TestListTransactions:
 
         response = client.get("/transactions", params={"skip": 10, "limit": 5})
         assert response.status_code == 200
-        assert response.json() == []
+        assert data_of(response) == []
 
     def test_filter_by_type_gasto(self, client, db_session):
         seed_categories(db_session)
@@ -194,7 +257,7 @@ class TestListTransactions:
         response = client.get("/transactions", params={"type": "gasto"})
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert len(data) == 2
         assert all(t["type"] == "gasto" for t in data)
 
@@ -206,10 +269,16 @@ class TestListTransactions:
         response = client.get("/transactions", params={"type": "ingreso"})
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert len(data) == 1
         assert data[0]["type"] == "ingreso"
         assert float(data[0]["amount"]) == 50000.0
+
+    def test_invalid_type_rejected_by_schema(self, client, db_session):
+        seed_categories(db_session)
+        response = client.get("/transactions", params={"type": "ahorro"})
+        assert response.status_code == 422
+        assert error_of(response)["code"] == "VALIDATION_ERROR"
 
     def test_filter_by_category_id(self, client, db_session):
         seed_categories(db_session)
@@ -220,7 +289,7 @@ class TestListTransactions:
         response = client.get("/transactions", params={"category_id": 2})
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert len(data) == 2
         assert all(t["category_id"] == 2 for t in data)
 
@@ -238,13 +307,13 @@ class TestListTransactions:
         )
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert len(data) == 2  # 4 gastos de categoría 1, con skip=1 quedan 3 -> 2
         assert all(t["type"] == "gasto" and t["category_id"] == 1 for t in data)
 
 
 # ===========================================================================
-# 2. GET /transactions/summary — ingresos, gastos y saldo neto
+# 2. GET /transactions/summary — income/expenses/balance (agregación SQL)
 # ===========================================================================
 
 class TestTransactionsSummary:
@@ -255,7 +324,7 @@ class TestTransactionsSummary:
         response = client.get("/transactions/summary")
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert set(data.keys()) == {"income", "expenses", "balance"}
         assert float(data["income"]) == 0.0
         assert float(data["expenses"]) == 0.0
@@ -273,10 +342,9 @@ class TestTransactionsSummary:
         response = client.get("/transactions/summary")
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert float(data["income"]) == pytest.approx(60000.0)
         assert float(data["expenses"]) == pytest.approx(5000.0)
-        # balance = ingresos - gastos
         assert float(data["balance"]) == pytest.approx(55000.0)
 
     def test_summary_negative_balance(self, client, db_session):
@@ -284,7 +352,7 @@ class TestTransactionsSummary:
         seed_transaction(db_session, type="ingreso", amount=1000, category_id=12)
         seed_transaction(db_session, type="gasto", amount=3500, category_id=1)
 
-        data = client.get("/transactions/summary").json()
+        data = data_of(client.get("/transactions/summary"))
         assert float(data["balance"]) == pytest.approx(-2500.0)
 
     def test_summary_sums_types_independently(self, client, db_session):
@@ -297,7 +365,7 @@ class TestTransactionsSummary:
         response = client.get("/transactions/summary")
         assert response.status_code == 200
 
-        data = response.json()
+        data = data_of(response)
         assert float(data["expenses"]) == pytest.approx(7500.0)
         assert float(data["income"]) == pytest.approx(50000.0)
         assert float(data["balance"]) == pytest.approx(42500.0)
@@ -308,9 +376,46 @@ class TestTransactionsSummary:
         seed_transaction(db_session, type="gasto", amount=99999, user_id="2")
         seed_transaction(db_session, type="ingreso", amount=88888, user_id="2")
 
-        data = client.get("/transactions/summary").json()
+        data = data_of(client.get("/transactions/summary"))
         assert float(data["expenses"]) == pytest.approx(1000.0)
         assert float(data["income"]) == pytest.approx(0.0)
+
+    def test_summary_date_filters(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1000, category_id=1,
+                         transaction_date=date(2026, 9, 1))
+        seed_transaction(db_session, type="gasto", amount=2000, category_id=1,
+                         transaction_date=date(2026, 9, 20))
+        seed_transaction(db_session, type="gasto", amount=4000, category_id=1,
+                         transaction_date=date(2026, 8, 15))
+
+        # Rango: septiembre 1-15 → solo la de 1000
+        data = data_of(client.get(
+            "/transactions/summary", params={"from": "2026-09-01", "to": "2026-09-15"}
+        ))
+        assert float(data["expenses"]) == pytest.approx(1000.0)
+
+        # Solo desde → septiembre completo (1000 + 2000)
+        data = data_of(client.get(
+            "/transactions/summary", params={"from": "2026-09-01"}
+        ))
+        assert float(data["expenses"]) == pytest.approx(3000.0)
+
+        # Rango que excluye agosto → la de 4000 no cuenta
+        data = data_of(client.get(
+            "/transactions/summary",
+            params={"from": "2026-08-01", "to": "2026-08-31"},
+        ))
+        assert float(data["expenses"]) == pytest.approx(4000.0)
+
+    def test_summary_invalid_date_range(self, client, db_session):
+        seed_categories(db_session)
+        response = client.get(
+            "/transactions/summary",
+            params={"from": "2026-09-30", "to": "2026-09-01"},
+        )
+        assert response.status_code == 422
+        assert error_of(response)["code"] == "VALIDATION_ERROR"
 
 
 # ===========================================================================
@@ -335,9 +440,7 @@ class TestParseTransaction:
         )
         assert response.status_code == 200
 
-        data = response.json()
-        assert data["status"] == "success"
-        assert "guardada" in data["message"]
+        data = data_of(response)
 
         # Datos extraídos por la IA
         extracted = data["extracted_data"]
@@ -348,7 +451,7 @@ class TestParseTransaction:
         assert extracted["category_id"] == 1
         assert extracted["category_name"] == "Alimentación"
 
-        # La transacción quedó guardada con el usuario por defecto
+        # La transacción quedó guardada con el usuario por defecto (string)
         transaccion = data["transaction"]
         assert transaccion["user_id"] == "1"
         assert transaccion["type"] == "gasto"
@@ -372,10 +475,10 @@ class TestParseTransaction:
         )
         assert response.status_code == 200
 
-        data = response.json()
-        assert data["extracted_data"]["type"] == "ingreso"
-        assert data["extracted_data"]["category_id"] == 12
-        assert float(data["extracted_data"]["amount"]) == 50000.0
+        extracted = data_of(response)["extracted_data"]
+        assert extracted["type"] == "ingreso"
+        assert extracted["category_id"] == 12
+        assert float(extracted["amount"]) == 50000.0
 
     def test_parse_unknown_category_defaults_to_7(self, client, db_session, fake_ai):
         seed_categories(db_session)
@@ -390,7 +493,7 @@ class TestParseTransaction:
             json={"text": "Pago misterioso de 990"},
         )
         assert response.status_code == 200
-        assert response.json()["extracted_data"]["category_id"] == 7
+        assert data_of(response)["extracted_data"]["category_id"] == 7
 
     def test_parse_invalid_type_returns_422(self, client, db_session, fake_ai):
         seed_categories(db_session)
@@ -401,7 +504,7 @@ class TestParseTransaction:
             json={"text": "Ahorro 1000"},
         )
         assert response.status_code == 422
-        assert "ahorro" in response.json()["detail"]
+        assert "ahorro" in error_of(response)["message"]
 
     def test_parse_missing_amount_returns_422(self, client, db_session, fake_ai):
         seed_categories(db_session)
@@ -412,21 +515,25 @@ class TestParseTransaction:
             json={"text": "Compré algo pero no recuerdo cuánto"},
         )
         assert response.status_code == 422
-        assert "monto" in response.json()["detail"]
+        assert "monto" in error_of(response)["message"]
 
         # No debe haber guardado nada
         assert db_session.query(models.Transaction).count() == 0
 
-    def test_parse_ai_failure_returns_502(self, client, db_session, fake_ai):
+    def test_parse_ai_failure_returns_503(self, client, db_session, fake_ai):
         seed_categories(db_session)
-        fake_ai(Exception("Fallo tras 3 intentos"))
+        fake_ai(Exception("Timeout tras 2 modelos"))
 
         response = client.post(
             "/transactions/parse",
             json={"text": "Gasté 1000 en café"},
         )
-        assert response.status_code == 502
-        assert "IA" in response.json()["detail"]
+        assert response.status_code == 503
+        error = error_of(response)
+        assert error["code"] == "SERVICE_UNAVAILABLE"
+        assert "IA" in error["message"]
+        # Debe sugerir reintento
+        assert response.headers.get("Retry-After") == "30"
 
         # No debe haber guardado nada
         assert db_session.query(models.Transaction).count() == 0
@@ -436,3 +543,67 @@ class TestParseTransaction:
 
         response = client.post("/transactions/parse", json={})
         assert response.status_code == 422  # validación de Pydantic
+
+    def test_process_alias_uses_body(self, client, db_session, fake_ai):
+        seed_categories(db_session)
+        fake_ai({"type": "gasto", "amount": 3500, "category_id": 1})
+
+        response = client.post(
+            "/transactions/process",
+            json={"mensaje": "Pagué 3500 de tarjeta"},
+        )
+        assert response.status_code == 200
+        data = data_of(response)
+        assert data["extracted_data"]["type"] == "gasto"
+        assert data["transaction"]["user_id"] == "1"  # string, no int
+
+        assert db_session.query(models.Transaction).count() == 1
+
+
+# ===========================================================================
+# 4. Seguridad — API key y rate limiting
+# ===========================================================================
+
+class TestSecurity:
+
+    def test_api_key_required_when_configured(self, client, db_session, monkeypatch):
+        monkeypatch.setattr(app_config.settings, "api_key", "clave-secreta-123")
+        seed_categories(db_session)
+
+        # Sin header → 401 con envelope de error
+        response = client.get("/transactions")
+        assert response.status_code == 401
+        assert error_of(response)["code"] == "UNAUTHORIZED"
+
+        # Header correcto → 200
+        response = client.get(
+            "/transactions", headers={"X-API-Key": "clave-secreta-123"}
+        )
+        assert response.status_code == 200
+
+        # Header incorrecto → 401
+        response = client.get("/transactions", headers={"X-API-Key": "otra-clave"})
+        assert response.status_code == 401
+
+    def test_health_exempt_from_api_key(self, client, monkeypatch):
+        monkeypatch.setattr(app_config.settings, "api_key", "clave-secreta-123")
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_rate_limit_returns_429(self, client, db_session, fake_ai, monkeypatch):
+        monkeypatch.setattr(app_config.settings, "parse_rate_limit", 2)
+        seed_categories(db_session)
+        fake_ai({"type": "gasto", "amount": 1000, "category_id": 1})
+
+        payload = {"text": "Gasté 1000"}
+        assert client.post("/transactions/parse", json=payload).status_code == 200
+        assert client.post("/transactions/parse", json=payload).status_code == 200
+
+        response = client.post("/transactions/parse", json=payload)
+        assert response.status_code == 429
+        error = error_of(response)
+        assert error["code"] == "RATE_LIMITED"
+        assert response.headers.get("Retry-After") == "60"
+
+        # No se guardó nada extra por la tercera llamada
+        assert db_session.query(models.Transaction).count() == 2

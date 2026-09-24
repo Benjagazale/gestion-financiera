@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, Date, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, Date, Text, DateTime, ForeignKey, Index
 from sqlalchemy.sql import func
 from database import Base
 
@@ -14,7 +14,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String(100), nullable=False)
+    user_id = Column(String(100), nullable=False, index=True)
     type = Column(String(20), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="CLP", nullable=False)
@@ -23,6 +23,12 @@ class Transaction(Base):
     description = Column(Text)
     transaction_date = Column(Date, server_default=func.current_date(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Índices compuestos para las consultas por usuario (listado y resumen)
+    __table_args__ = (
+        Index("ix_transactions_user_type", "user_id", "type"),
+        Index("ix_transactions_user_date", "user_id", "transaction_date"),
+    )
 
 class ConversationMemory(Base):
     __tablename__ = "conversation_memory"
