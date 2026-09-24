@@ -21,7 +21,7 @@ class Transaction(Base):
     # Monto normalizado a CLP (para USD se usa la tasa FX_USD_CLP)
     amount_clp = Column(Numeric(12, 2), nullable=True)
     merchant = Column(String(255))
-    category_id = Column(Integer, ForeignKey("categories.id"), default=7)
+    category_id = Column(Integer, ForeignKey("categories.id"), default=17)  # "Sin Categorizar"
     description = Column(Text)
     transaction_date = Column(Date, server_default=func.current_date(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

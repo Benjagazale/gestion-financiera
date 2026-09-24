@@ -149,6 +149,7 @@ def seed_categories(session):
         (1, "Alimentación"),
         (2, "Transporte"),
         (12, "Sueldo y Salario"),
+        (17, "Sin Categorizar"),  # default en producción
     ]
     for cat_id, nombre in categorias:
         session.add(models.Category(id=cat_id, name=nombre, is_active=True))
@@ -470,13 +471,13 @@ class TestTransactionsCrud:
         assert response.status_code == 422
         assert "999" in error_of(response)["message"]
 
-    def test_create_without_category_defaults_to_7(self, client, db_session):
+    def test_create_without_category_defaults_to_17(self, client, db_session):
         seed_categories(db_session)
         response = client.post("/transactions", json={
             "type": "gasto", "amount": 1000,
         })
         assert response.status_code == 201
-        assert data_of(response)["category_id"] == 7
+        assert data_of(response)["category_id"] == 17  # "Sin Categorizar"
 
     def test_create_is_idempotent_by_client_request_id(self, client, db_session):
         seed_categories(db_session)
@@ -664,7 +665,7 @@ class TestParseAndConfirm:
         assert draft["category_id"] == 12
         assert float(draft["amount"]) == 50000.0
 
-    def test_parse_unknown_category_defaults_to_7(self, client, db_session, fake_ai):
+    def test_parse_unknown_category_defaults_to_17(self, client, db_session, fake_ai):
         seed_categories(db_session)
         fake_ai({"type": "gasto", "amount": 990, "category": "Categoría Inexistente"})
 
@@ -672,7 +673,7 @@ class TestParseAndConfirm:
             "/transactions/parse", json={"text": "Pago misterioso de 990"}
         )
         assert response.status_code == 200
-        assert data_of(response)["draft"]["category_id"] == 7
+        assert data_of(response)["draft"]["category_id"] == 17  # "Sin Categorizar"
 
     def test_parse_invalid_type_returns_422(self, client, db_session, fake_ai):
         seed_categories(db_session)

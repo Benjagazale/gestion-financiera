@@ -19,8 +19,8 @@ jobs:
           RENDER_URL: ${{ vars.RENDER_URL }}
         run: |
           if [ -z "$RENDER_URL" ]; then
-            echo "::notice::RENDER_URL no configurada — define la variable del repo."
-            exit 0
+            echo "::error::RENDER_URL no configurada — define la variable del repo."
+            exit 1
           fi
           # La primera petición tras dormir tarda ~60s (cold start)
           curl -fsS --max-time 120 --retry 3 --retry-delay 30 \

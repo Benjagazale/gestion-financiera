@@ -24,7 +24,7 @@ from core.config import settings
 logger = logging.getLogger("agente")
 
 ZONA_CHILE = ZoneInfo("America/Santiago")
-CATEGORIA_DEFAULT = 7  # "Sin Categorizar"
+CATEGORIA_DEFAULT = 17  # "Sin Categorizar" (id real en la BD)
 MONEDAS_VALIDAS = ("CLP", "USD")
 
 

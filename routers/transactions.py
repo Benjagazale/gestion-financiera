@@ -144,7 +144,7 @@ def editar_transaccion(
         if not (v is None and k in ("amount", "type", "currency", "transaction_date"))
     }
     if cambios.get("category_id") is None and "category_id" in cambios:
-        cambios["category_id"] = 7  # null explícito → "Sin Categorizar"
+        cambios["category_id"] = 17  # null explícito → "Sin Categorizar"
 
     if "category_id" in cambios:
         cambios["category_id"] = validar_categoria(db, cambios["category_id"])
