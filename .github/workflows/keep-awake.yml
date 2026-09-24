@@ -1,0 +1,28 @@
+# Anti-sleep: ping a /health cada 10 min (umbral de Render: 15 min).
+# Repo público → GitHub Actions sin costo.
+#
+# Requiere: Settings → Secrets and variables → Actions → Variables
+#   RENDER_URL = https://TU-SERVICIO.onrender.com
+name: Keep Render Awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # ejecución manual para probar
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
+        run: |
+          if [ -z "$RENDER_URL" ]; then
+            echo "::notice::RENDER_URL no configurada — define la variable del repo."
+            exit 0
+          fi
+          # La primera petición tras dormir tarda ~60s (cold start)
+          curl -fsS --max-time 120 --retry 3 --retry-delay 30 \
+            "$RENDER_URL/health" -o /dev/null \
+            -w "Ping OK: HTTP %{http_code} en %{time_total}s\n"

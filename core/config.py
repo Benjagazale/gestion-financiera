@@ -32,7 +32,7 @@ class Settings:
     cors_origins: list[str] = field(default_factory=lambda: _csv("CORS_ORIGINS", "*"))
 
     # Tipo de cambio para normalizar USD → CLP (tasa fija configurable;
-    #-refresh automático desde API queda para FASE 2)
+    # el refresh automático desde una API es una mejora futura)
     fx_usd_clp: Decimal = Decimal(os.getenv("FX_USD_CLP", "950"))
 
 

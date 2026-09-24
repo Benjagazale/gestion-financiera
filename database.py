@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -6,12 +7,39 @@ from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL)
+def _normalizar_url(url: str) -> str:
+    """Prepara DATABASE_URL para producción (Supabase + Render):
+
+    - SQLAlchemy 2.x exige el esquema ``postgresql://`` (Supabase entrega
+      ``postgres://`` en su connection string).
+    - Supabase exige SSL: agrega ``sslmode=require`` si no viene explícito.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if "sslmode=" not in url:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
+    return url
+
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "Falta la variable de entorno DATABASE_URL "
+        "(archivo .env en local, Render Dashboard en producción)."
+    )
+
+engine = create_engine(
+    _normalizar_url(DATABASE_URL),
+    # Supabase cierra conexiones inactivas: verificar antes de usarlas
+    # y reciclar cada 30 min evita "server closed the connection".
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
 
 # Dependencia para obtener la sesión de base de datos en los endpoints
 def get_db():
