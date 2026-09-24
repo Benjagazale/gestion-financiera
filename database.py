@@ -1,4 +1,5 @@
 import os
+import re
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -11,12 +12,23 @@ load_dotenv()
 def _normalizar_url(url: str) -> str:
     """Prepara DATABASE_URL para producción (Supabase + Render):
 
+    - Elimina artefactos de copiar-pegar (espacios, saltos de línea,
+      comillas, prefijo ``DATABASE_URL=``).
     - SQLAlchemy 2.x exige el esquema ``postgresql://`` (Supabase entrega
       ``postgres://`` en su connection string).
     - Supabase exige SSL: agrega ``sslmode=require`` si no viene explícito.
     """
+    url = re.sub(r"\s+", "", url).strip("\"'")
+    if url.startswith("DATABASE_URL="):
+        url = url[len("DATABASE_URL="):].strip("\"'")
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
+    if "://" not in url:
+        raise RuntimeError(
+            "DATABASE_URL no es un connection string válido (se esperaba "
+            "postgresql://usuario:password@host:puerto/base). Revisa el valor "
+            "en el dashboard de Render."
+        )
     if "sslmode=" not in url:
         url += ("&" if "?" in url else "?") + "sslmode=require"
     return url
