@@ -18,11 +18,16 @@ class Transaction(Base):
     type = Column(String(20), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="CLP", nullable=False)
+    # Monto normalizado a CLP (para USD se usa la tasa FX_USD_CLP)
+    amount_clp = Column(Numeric(12, 2), nullable=True)
     merchant = Column(String(255))
     category_id = Column(Integer, ForeignKey("categories.id"), default=7)
     description = Column(Text)
     transaction_date = Column(Date, server_default=func.current_date(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Idempotencia: reintentos seguros sin duplicar transacciones
+    client_request_id = Column(String(64), unique=True, nullable=True)
 
     # Índices compuestos para las consultas por usuario (listado y resumen)
     __table_args__ = (

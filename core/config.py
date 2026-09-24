@@ -1,6 +1,7 @@
 """Configuración central: lee .env una sola vez y expone `settings`."""
 import os
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -29,6 +30,10 @@ class Settings:
 
     # CORS: restringir al dominio del frontend en producción
     cors_origins: list[str] = field(default_factory=lambda: _csv("CORS_ORIGINS", "*"))
+
+    # Tipo de cambio para normalizar USD → CLP (tasa fija configurable;
+    #-refresh automático desde API queda para FASE 2)
+    fx_usd_clp: Decimal = Decimal(os.getenv("FX_USD_CLP", "950"))
 
 
 settings = Settings()
