@@ -1,25 +1,25 @@
 /* ============================================================
-   Agente Financiero — identidad visual (paleta obligatoria)
-   #012340 fondo / tonos oscuros / texto sobre acentos
-   #0367A6 elementos secundarios / bordes / tarjetas
-   #0D8BD9 botones / enlaces / destacados
-   #4AA2D9 hover / estados activos
-   #79C4F2 fondos sutiles / alertas info / detalles
+   Agente Financiero — identidad visual estilo Fintoc (paleta obligatoria)
+   #0A0A0A fondo principal / #121212 superficies elevadas (header, toolbar, inputs)
+   #1E1E24 tarjetas y paneles
+   #FFFFFF texto principal
+   #2563EB acento: CTA, botones, tabs activas, barras
+   #27272A bordes sutiles y separación
+   Derivados: #3B82F6 hover · #0055FF estado activo · #A1A1AA texto secundario
+   Semánticos de dinero (verde/rojo) fuera de la identidad cromática.
    ============================================================ */
 :root {
-  --fondo: #012340;
-  --panel: #0367A6;
-  --accion: #0D8BD9;
-  --hover: #4AA2D9;
-  --suave: #79C4F2;
+  --fondo: #0A0A0A;
+  --elevado: #121212;
+  --superficie: #1E1E24;
+  --texto: #FFFFFF;
+  --acento: #2563EB;
+  --borde: #27272A;
 
-  /* Derivados para contraste AA sobre fondo oscuro */
-  --texto: #EAF4FB;
-  --texto-suave: #9CC9E6;
-  --panel-bg: color-mix(in srgb, var(--panel) 38%, var(--fondo));
-  --panel-borde: color-mix(in srgb, var(--panel) 78%, var(--fondo));
+  --acento-hover: #3B82F6;
+  --acento-activo: #0055FF;
+  --texto-suave: #A1A1AA;
 
-  /* Semánticos de dinero (entrada/salida) — fuera de la identidad cromática */
   --verde: #4ADE80;
   --rojo: #F87171;
 
@@ -41,8 +41,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--fondo);
-  border-bottom: 1px solid var(--panel);
+  background: var(--elevado);
+  border-bottom: 1px solid var(--borde);
 }
 .top-inner {
   width: min(1600px, 96vw);
@@ -79,15 +79,15 @@ body {
   border: 1px solid transparent;
 }
 .tab:hover {
-  background: color-mix(in srgb, var(--hover) 40%, transparent);
+  background: color-mix(in srgb, var(--acento-hover) 40%, transparent);
   color: var(--texto);
 }
 .tab.activa {
-  background: var(--hover);
-  color: var(--fondo);
+  background: var(--acento);
+  color: var(--texto);
   font-weight: 600;
 }
-.tab:focus-visible { outline: 2px solid var(--suave); outline-offset: 2px; }
+.tab:focus-visible { outline: 2px solid var(--acento-hover); outline-offset: 2px; }
 
 /* ---------- Contenedor ancho: ≥80% del viewport, responsivo ---------- */
 main {
@@ -97,7 +97,16 @@ main {
   display: grid;
   gap: 1rem;
 }
-.toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  background: var(--elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: .55rem .9rem;
+}
 .layout {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -120,11 +129,11 @@ main {
 
 /* ---------- Paneles / tarjetas ---------- */
 .panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-borde);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
   border-radius: var(--radio);
   padding: 1.1rem 1.25rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, .28);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
   min-width: 0;
 }
 .panel h2 {
@@ -133,7 +142,7 @@ main {
   font-weight: 600;
   letter-spacing: .05em;
   text-transform: uppercase;
-  color: var(--suave);
+  color: var(--texto-suave);
 }
 .cabecera {
   display: flex;
@@ -178,68 +187,68 @@ main {
   grid-column: 1 / -1;
   height: 9px;
   background: var(--fondo);
-  border: 1px solid var(--panel);
+  border: 1px solid var(--borde);
   border-radius: 999px;
   overflow: hidden;
 }
 .barra-fill {
   display: block;
   height: 100%;
-  background: var(--accion);
+  background: var(--acento);
   border-radius: 999px;
 }
 
 /* Controles */
 button {
   font: inherit;
-  border: 1px solid var(--panel);
-  background: transparent;
+  border: 1px solid var(--borde);
+  background: var(--elevado);
   color: var(--texto);
   border-radius: 9px;
   padding: .55rem .95rem;
   cursor: pointer;
 }
-button:hover { border-color: var(--hover); color: var(--suave); }
+button:hover { border-color: var(--acento-hover); color: var(--texto); }
 button:disabled { opacity: .5; cursor: wait; }
 .primario {
-  background: var(--accion);
-  border-color: var(--accion);
-  color: var(--fondo);
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--texto);
   font-weight: 600;
 }
 .primario:hover {
-  background: var(--hover);
-  border-color: var(--hover);
-  color: var(--fondo);
+  background: var(--acento-hover);
+  border-color: var(--acento-hover);
+  color: var(--texto);
 }
 .exito {
-  background: var(--suave);
-  border-color: var(--suave);
+  background: var(--texto);
+  border-color: var(--texto);
   color: var(--fondo);
   font-weight: 600;
 }
 .exito:hover {
-  background: var(--hover);
-  border-color: var(--hover);
-  color: var(--fondo);
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--texto);
 }
 
 input, select, textarea {
   font: inherit;
   width: 100%;
   padding: .55rem .7rem;
-  border: 1px solid var(--panel);
+  border: 1px solid var(--borde);
   border-radius: 9px;
-  background: var(--fondo);
+  background: var(--elevado);
   color: var(--texto);
 }
 input::placeholder, textarea::placeholder { color: var(--texto-suave); }
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: var(--hover);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hover) 35%, transparent);
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 35%, transparent);
 }
-option { background: var(--fondo); color: var(--texto); }
+option { background: var(--elevado); color: var(--texto); }
 textarea { resize: vertical; }
 #mes { width: auto; }
 
@@ -259,12 +268,12 @@ textarea { resize: vertical; }
 /* Borrador IA editable */
 .borrador {
   margin-top: 1rem;
-  border: 1px dashed var(--accion);
+  border: 1px dashed var(--acento);
   border-radius: var(--radio);
   padding: .9rem;
-  background: color-mix(in srgb, var(--accion) 12%, var(--fondo));
+  background: color-mix(in srgb, var(--acento) 12%, var(--fondo));
 }
-.borrador h3 { margin: 0 0 .6rem; font-size: .86rem; color: var(--suave); }
+.borrador h3 { margin: 0 0 .6rem; font-size: .86rem; color: var(--texto); }
 
 /* Lista */
 .lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
@@ -274,12 +283,12 @@ textarea { resize: vertical; }
   align-items: center;
   gap: .75rem;
   padding: .65rem .8rem;
-  background: color-mix(in srgb, var(--panel) 16%, var(--fondo));
-  border: 1px solid var(--panel-borde);
+  background: var(--elevado);
+  border: 1px solid var(--borde);
   border-radius: 11px;
   transition: border-color .15s ease;
 }
-.item:hover { border-color: var(--hover); }
+.item:hover { border-color: var(--acento); }
 .item-izq { display: flex; align-items: center; gap: .65rem; min-width: 0; }
 .badge {
   font-size: .66rem;
@@ -311,8 +320,8 @@ textarea { resize: vertical; }
 .item-der strong.gasto { color: var(--rojo); }
 .item-der strong.ingreso { color: var(--verde); }
 .acciones { display: flex; gap: .25rem; }
-.acciones button { padding: .3rem .45rem; font-size: .9rem; border-color: transparent; }
-.acciones button:hover { border-color: var(--hover); color: var(--suave); }
+.acciones button { padding: .3rem .45rem; font-size: .9rem; border-color: transparent; background: transparent; }
+.acciones button:hover { border-color: var(--acento-hover); color: var(--texto); }
 
 .vacio {
   color: var(--texto-suave);
@@ -331,18 +340,18 @@ textarea { resize: vertical; }
   left: 50%;
   bottom: 1.2rem;
   transform: translateX(-50%);
-  background: var(--suave);
-  color: var(--fondo);
+  background: var(--acento);
+  color: var(--texto);
   padding: .7rem 1.15rem;
   border-radius: 999px;
   font-size: .9rem;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
   z-index: 20;
   max-width: 90vw;
   text-align: center;
 }
-.toast.error { background: var(--rojo); color: #fff; }
+.toast.error { background: var(--rojo); color: var(--fondo); }
 
 @media (max-width: 540px) {
   .form, .form-borrador { grid-template-columns: 1fr; }

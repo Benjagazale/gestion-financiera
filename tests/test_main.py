@@ -237,6 +237,16 @@ class TestFrontend:
             assert f'data-tab="{tab}"' in response.text, tab
             assert f'id="vista-{tab}"' in response.text, tab
 
+    def test_styles_use_fintoc_palette(self, client):
+        """Sesión A: la hoja de estilos usa la paleta Fintoc y no la azul anterior."""
+        response = client.get("/styles.css")
+        assert response.status_code == 200
+        css = response.text.upper()
+        for color in ("#0A0A0A", "#121212", "#1E1E24", "#FFFFFF", "#2563EB", "#27272A"):
+            assert color in css, f"Falta el color {color}"
+        for viejo in ("#012340", "#0367A6", "#0D8BD9", "#4AA2D9", "#79C4F2"):
+            assert viejo not in css, f"Sobrevive la paleta anterior {viejo}"
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)
