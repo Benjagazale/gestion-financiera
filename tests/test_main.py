@@ -343,6 +343,134 @@ class TestListTransactions:
 
 
 # ===========================================================================
+# 1b. Filtros de fecha en lista + resumen por categoría (FASE 3)
+# ===========================================================================
+
+class TestDateFiltersAndByCategory:
+
+    def test_list_filters_by_date_range(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1000,
+                         transaction_date=date(2026, 9, 1))
+        seed_transaction(db_session, type="gasto", amount=2000,
+                         transaction_date=date(2026, 9, 20))
+        seed_transaction(db_session, type="gasto", amount=4000,
+                         transaction_date=date(2026, 8, 15))
+
+        response = client.get(
+            "/transactions", params={"from": "2026-09-01", "to": "2026-09-15"}
+        )
+        assert response.status_code == 200
+        data = data_of(response)
+        assert len(data) == 1
+        assert float(data[0]["amount"]) == 1000.0
+
+    def test_list_filters_from_only(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1000,
+                         transaction_date=date(2026, 9, 1))
+        seed_transaction(db_session, type="gasto", amount=2000,
+                         transaction_date=date(2026, 9, 20))
+        seed_transaction(db_session, type="gasto", amount=4000,
+                         transaction_date=date(2026, 8, 15))
+
+        data = data_of(client.get("/transactions", params={"from": "2026-09-01"}))
+        assert len(data) == 2
+
+    def test_list_invalid_date_range_422(self, client, db_session):
+        seed_categories(db_session)
+        response = client.get(
+            "/transactions", params={"from": "2026-09-30", "to": "2026-09-01"}
+        )
+        assert response.status_code == 422
+        assert error_of(response)["code"] == "VALIDATION_ERROR"
+
+    def test_by_category_totals_ordered_desc(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1500, category_id=1)
+        seed_transaction(db_session, type="gasto", amount=500, category_id=1)
+        seed_transaction(db_session, type="gasto", amount=2500, category_id=2)
+        seed_transaction(db_session, type="ingreso", amount=50000, category_id=12)
+
+        response = client.get("/transactions/summary/by-category",
+                              params={"type": "gasto"})
+        assert response.status_code == 200
+        data = data_of(response)
+        assert [i["category_id"] for i in data] == [2, 1]
+        assert data[0]["category_name"] == "Transporte"
+        assert float(data[0]["total"]) == pytest.approx(2500.0)
+        assert data[0]["count"] == 1
+        assert data[1]["category_name"] == "Alimentación"
+        assert float(data[1]["total"]) == pytest.approx(2000.0)
+        assert data[1]["count"] == 2
+
+    def test_by_category_without_type_includes_ingresos(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=2500, category_id=2)
+        seed_transaction(db_session, type="ingreso", amount=50000, category_id=12)
+
+        data = data_of(client.get("/transactions/summary/by-category"))
+        assert len(data) == 2
+        assert {i["type"] for i in data} == {"gasto", "ingreso"}
+
+    def test_by_category_ignores_other_users(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1000, user_id="1")
+        seed_transaction(db_session, type="gasto", amount=99999, user_id="2")
+
+        data = data_of(client.get("/transactions/summary/by-category"))
+        assert len(data) == 1
+        assert float(data[0]["total"]) == pytest.approx(1000.0)
+
+    def test_by_category_date_filters(self, client, db_session):
+        seed_categories(db_session)
+        seed_transaction(db_session, type="gasto", amount=1000, category_id=1,
+                         transaction_date=date(2026, 9, 1))
+        seed_transaction(db_session, type="gasto", amount=2000, category_id=1,
+                         transaction_date=date(2026, 9, 20))
+        seed_transaction(db_session, type="gasto", amount=4000, category_id=2,
+                         transaction_date=date(2026, 8, 15))
+
+        data = data_of(client.get(
+            "/transactions/summary/by-category",
+            params={"type": "gasto", "from": "2026-09-01", "to": "2026-09-15"},
+        ))
+        assert len(data) == 1
+        assert data[0]["category_id"] == 1
+        assert float(data[0]["total"]) == pytest.approx(1000.0)
+
+    def test_by_category_null_category_named_sin_categorizar(self, client, db_session):
+        seed_categories(db_session)
+        tx = seed_transaction(db_session, type="gasto", amount=700, category_id=1)
+        # Fila legada insertada fuera de la app: el default del modelo (17) solo
+        # aplica en INSERT, así que un UPDATE deja el NULL real que prueba el coalesce
+        db_session.query(models.Transaction).filter(
+            models.Transaction.id == tx.id
+        ).update({"category_id": None})
+        db_session.commit()
+
+        data = data_of(client.get("/transactions/summary/by-category"))
+        assert len(data) == 1
+        assert data[0]["category_id"] is None
+        assert data[0]["category_name"] == "Sin Categorizar"
+        assert float(data[0]["total"]) == pytest.approx(700.0)
+
+    def test_by_category_invalid_range_422(self, client, db_session):
+        seed_categories(db_session)
+        response = client.get(
+            "/transactions/summary/by-category",
+            params={"from": "2026-09-30", "to": "2026-09-01"},
+        )
+        assert response.status_code == 422
+        assert error_of(response)["code"] == "VALIDATION_ERROR"
+
+    def test_by_category_empty_database(self, client, db_session):
+        seed_categories(db_session)
+        data = data_of(client.get("/transactions/summary/by-category"))
+        assert data == []
+
+
+# ===========================================================================
 # 2. GET /transactions/summary — income/expenses/balance (agregación SQL)
 # ===========================================================================
 

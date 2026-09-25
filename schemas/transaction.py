@@ -35,6 +35,16 @@ class TransactionOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class CategorySummary(BaseModel):
+    """Agregado por categoría para dashboard (top gastos/ingresos)."""
+
+    type: TIPO
+    category_id: Optional[int] = None
+    category_name: str
+    total: float
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # Requests
 # ---------------------------------------------------------------------------

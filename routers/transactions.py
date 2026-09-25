@@ -12,6 +12,7 @@ from database import get_db
 import models
 from schemas.response import Envelope, envelope
 from schemas.transaction import (
+    CategorySummary,
     ParseDraftData,
     ProcessRequest,
     TransactionCreate,
@@ -19,7 +20,10 @@ from schemas.transaction import (
     TransactionParseRequest,
     TransactionUpdate,
 )
-from services.summary_service import calculate_financial_summary
+from services.summary_service import (
+    calculate_financial_summary,
+    calculate_summary_by_category,
+)
 from services.transaction_service import (
     actualizar_transaccion,
     eliminar_transaccion,
@@ -40,6 +44,12 @@ def _out(tx: models.Transaction) -> dict:
     return TransactionOut.model_validate(tx).model_dump(mode="json")
 
 
+def _validar_rango(fecha_desde: Optional[date], fecha_hasta: Optional[date]) -> None:
+    """'from' posterior a 'to' → 422 (fechas en calendario Chile)."""
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=422, detail="'from' no puede ser posterior a 'to'")
+
+
 # ---------------------------------------------------------------------------
 # Lectura
 # ---------------------------------------------------------------------------
@@ -50,8 +60,14 @@ def listar_transacciones(
     limit: int = Query(100, ge=1, le=500),
     type: Optional[Literal["gasto", "ingreso"]] = None,
     category_id: Optional[int] = Query(None, ge=1),
+    fecha_desde: Optional[date] = Query(None, alias="from"),
+    fecha_hasta: Optional[date] = Query(None, alias="to"),
     db: Session = Depends(get_db),
 ):
+    """Lista con filtros combinables. ?from=&to= filtra por transaction_date
+    en calendario Chile (mismo patrón que /summary)."""
+    _validar_rango(fecha_desde, fecha_hasta)
+
     query = db.query(models.Transaction).filter(
         models.Transaction.user_id == settings.default_user_id
     )
@@ -59,6 +75,10 @@ def listar_transacciones(
         query = query.filter(models.Transaction.type == type)
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
+    if fecha_desde is not None:
+        query = query.filter(models.Transaction.transaction_date >= fecha_desde)
+    if fecha_hasta is not None:
+        query = query.filter(models.Transaction.transaction_date <= fecha_hasta)
 
     transacciones = query.order_by(models.Transaction.id).offset(skip).limit(limit).all()
     return envelope([_out(t) for t in transacciones])
@@ -72,8 +92,7 @@ def obtener_resumen_financiero(
 ):
     """Resumen financiero vía agregación SQL. Filtros de fecha opcionales
     en calendario Chile (?from=YYYY-MM-DD&to=YYYY-MM-DD)."""
-    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
-        raise HTTPException(status_code=422, detail="'from' no puede ser posterior a 'to'")
+    _validar_rango(fecha_desde, fecha_hasta)
 
     resumen = calculate_financial_summary(
         db,
@@ -82,6 +101,29 @@ def obtener_resumen_financiero(
         date_to=fecha_hasta,
     )
     return envelope(resumen)
+
+
+@router.get("/summary/by-category", response_model=Envelope)
+def resumen_por_categoria(
+    fecha_desde: Optional[date] = Query(None, alias="from"),
+    fecha_hasta: Optional[date] = Query(None, alias="to"),
+    type: Optional[Literal["gasto", "ingreso"]] = None,
+    db: Session = Depends(get_db),
+):
+    """Totales agrupados por categoría (orden desc): top gastos/ingresos del
+    rango ?from=&to= (calendario Chile). Opcional &type=gasto|ingreso."""
+    _validar_rango(fecha_desde, fecha_hasta)
+
+    filas = calculate_summary_by_category(
+        db,
+        user_id=settings.default_user_id,
+        date_from=fecha_desde,
+        date_to=fecha_hasta,
+        type=type,
+    )
+    return envelope(
+        [CategorySummary.model_validate(f).model_dump(mode="json") for f in filas]
+    )
 
 
 @router.get("/{transaction_id}", response_model=Envelope)
