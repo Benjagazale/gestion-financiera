@@ -11,7 +11,7 @@ FASE 2 (deploy Render Free) · FASE 3 (multiusuario + chat + frontend).
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/health` | Estado (sin API key) |
-| GET | `/` | **Interfaz web** (SPA: resumen, alta, borrador IA, lista) |
+| GET | `/` | **Interfaz web** (SPA con pestañas: resumen, ingresos, gastos, ahorros, cuentas, presupuestos, metas) |
 | GET | `/transactions` | Listado (`skip`, `limit`, `type`, `category_id`, `?from=&to=`) |
 | GET | `/transactions/summary` | `income`/`expenses`/`balance` vía SQL (`?from=&to=`) |
 | GET | `/transactions/summary/by-category` | Top por categoría (`?from=&to=&type=`) |

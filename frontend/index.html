@@ -3,16 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex, nofollow">
   <title>Agente Financiero</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <!-- Header con navegación por pestañas -->
   <header class="top">
-    <h1>💸 Agente Financiero</h1>
-    <span id="estado" class="estado">Conectando…</span>
+    <div class="top-inner">
+      <div class="marca">💸 <span>Agente Financiero</span></div>
+      <nav class="tabs" role="tablist" aria-label="Secciones de finanzas personales">
+        <a class="tab activa" href="#resumen" role="tab" data-tab="resumen" aria-selected="true" aria-label="Resumen General">Resumen</a>
+        <a class="tab" href="#ingresos" role="tab" data-tab="ingresos" aria-selected="false" aria-label="Resumen de Ingresos">Ingresos</a>
+        <a class="tab" href="#gastos" role="tab" data-tab="gastos" aria-selected="false" aria-label="Resumen de Gastos">Gastos</a>
+        <a class="tab" href="#ahorros" role="tab" data-tab="ahorros" aria-selected="false">Ahorros</a>
+        <a class="tab" href="#cuentas" role="tab" data-tab="cuentas" aria-selected="false">Mis Cuentas</a>
+        <a class="tab" href="#presupuestos" role="tab" data-tab="presupuestos" aria-selected="false">Presupuestos</a>
+        <a class="tab" href="#metas" role="tab" data-tab="metas" aria-selected="false">Metas</a>
+      </nav>
+      <span id="estado" class="estado">Conectando…</span>
+    </div>
   </header>
 
   <!-- Pantalla de configuración (API key) -->
@@ -29,121 +41,205 @@
 
   <main id="app" class="oculto">
 
-    <!-- Resumen -->
-    <section class="panel">
-      <div class="cabecera">
-        <h2>Resumen</h2>
-        <input type="month" id="mes" aria-label="Mes">
-      </div>
-      <div class="tarjetas">
-        <div class="tarjeta"><span>Ingresos</span><strong id="ingresos" class="verde">$0</strong></div>
-        <div class="tarjeta"><span>Gastos</span><strong id="gastos" class="rojo">$0</strong></div>
-        <div class="tarjeta"><span>Balance</span><strong id="balance">$0</strong></div>
-      </div>
-      <p class="ayuda">El mes seleccionado filtra también la lista y los gastos por categoría
-        (bórralo para ver todo).</p>
-    </section>
+    <!-- Período global: filtra todas las pestañas -->
+    <div class="toolbar">
+      <input type="month" id="mes" aria-label="Mes">
+      <span class="ayuda">El mes filtra todas las secciones (bórralo para ver todo).</span>
+    </div>
 
-    <!-- Gastos por categoría -->
-    <section class="panel oculto" id="panel-categorias">
-      <div class="cabecera">
-        <h2>Gastos por categoría</h2>
-        <span class="suave" id="cat-periodo"></span>
-      </div>
-      <div id="barras" class="barras"></div>
-    </section>
+    <!-- ============ Resumen General ============ -->
+    <div class="vista" id="vista-resumen" role="tabpanel" aria-label="Resumen General">
+      <div class="layout">
 
-    <!-- Registro rápido con IA -->
-    <section class="panel">
-      <h2>Registro rápido ✨</h2>
-      <textarea id="texto-ia" rows="2"
-        placeholder="Ej: Pagué 4500 en la micro al trabajo"></textarea>
-      <button id="btn-analizar" class="primario">Analizar</button>
+        <section class="panel kpi span-4">
+          <span class="kpi-label">Ingresos</span>
+          <strong id="ingresos" class="verde">$0</strong>
+        </section>
+        <section class="panel kpi span-4">
+          <span class="kpi-label">Gastos</span>
+          <strong id="gastos" class="rojo">$0</strong>
+        </section>
+        <section class="panel kpi span-4">
+          <span class="kpi-label">Balance</span>
+          <strong id="balance">$0</strong>
+        </section>
 
-      <div id="borrador" class="borrador oculto">
-        <h3>Borrador — ajusta lo que haga falta y confirma</h3>
-        <form id="form-borrador" class="form-borrador">
-          <label class="ancho">Descripción
-            <input type="text" id="b-desc" maxlength="2000" placeholder="Opcional">
-          </label>
-          <label>Tipo
-            <select id="b-tipo">
-              <option value="gasto">Gasto</option>
-              <option value="ingreso">Ingreso</option>
-            </select>
-          </label>
-          <label>Monto
-            <input type="number" id="b-monto" step="0.01" min="0.01" required>
-          </label>
-          <label>Moneda
-            <select id="b-moneda"><option>CLP</option><option>USD</option></select>
-          </label>
-          <label>Categoría
-            <select id="b-cat"></select>
-          </label>
-          <label>Fecha
-            <input type="date" id="b-fecha" required>
-          </label>
-          <div class="fila ancho">
-            <button type="submit" id="btn-confirmar" class="exito">Confirmar ✓</button>
-            <button type="button" id="btn-descartar">Descartar</button>
+        <section class="panel span-8" id="panel-categorias">
+          <div class="cabecera">
+            <h2>Gastos por categoría</h2>
+            <span class="suave" id="cat-periodo"></span>
           </div>
-        </form>
-      </div>
-    </section>
+          <div id="barras" class="barras"></div>
+        </section>
 
-    <!-- Alta manual / edición -->
-    <section class="panel">
-      <div class="cabecera">
-        <h2 id="form-titulo">Alta manual</h2>
-        <button type="button" id="btn-cancelar-edicion" class="oculto">Cancelar edición</button>
-      </div>
-      <form id="form-manual" class="form">
-        <label>Tipo
-          <select id="f-tipo">
-            <option value="gasto">Gasto</option>
-            <option value="ingreso">Ingreso</option>
-          </select>
-        </label>
-        <label>Monto
-          <input type="number" id="f-monto" step="0.01" min="0.01" required placeholder="0">
-        </label>
-        <label>Moneda
-          <select id="f-moneda"><option>CLP</option><option>USD</option></select>
-        </label>
-        <label>Categoría
-          <select id="f-cat"></select>
-        </label>
-        <label>Fecha
-          <input type="date" id="f-fecha" required>
-        </label>
-        <label class="ancho">Descripción
-          <input type="text" id="f-desc" maxlength="2000" placeholder="Opcional">
-        </label>
-        <div class="ancho">
-          <button type="submit" id="btn-guardar" class="primario">Guardar</button>
-        </div>
-      </form>
-    </section>
+        <section class="panel span-4">
+          <h2>Registro rápido ✨</h2>
+          <textarea id="texto-ia" rows="2"
+            placeholder="Ej: Pagué 4500 en la micro al trabajo"></textarea>
+          <button id="btn-analizar" class="primario">Analizar</button>
 
-    <!-- Lista -->
-    <section class="panel">
-      <div class="cabecera">
-        <h2>Transacciones</h2>
-        <div class="filtros">
-          <select id="filtro-tipo" aria-label="Filtrar por tipo">
-            <option value="">Todos</option>
-            <option value="gasto">Gastos</option>
-            <option value="ingreso">Ingresos</option>
-          </select>
-          <select id="filtro-cat" aria-label="Filtrar por categoría">
-            <option value="">Todas las categorías</option>
-          </select>
-        </div>
+          <div id="borrador" class="borrador oculto">
+            <h3>Borrador — ajusta lo que haga falta y confirma</h3>
+            <form id="form-borrador" class="form-borrador">
+              <label class="ancho">Descripción
+                <input type="text" id="b-desc" maxlength="2000" placeholder="Opcional">
+              </label>
+              <label>Tipo
+                <select id="b-tipo">
+                  <option value="gasto">Gasto</option>
+                  <option value="ingreso">Ingreso</option>
+                </select>
+              </label>
+              <label>Monto
+                <input type="number" id="b-monto" step="0.01" min="0.01" required>
+              </label>
+              <label>Moneda
+                <select id="b-moneda"><option>CLP</option><option>USD</option></select>
+              </label>
+              <label>Categoría
+                <select id="b-cat"></select>
+              </label>
+              <label>Fecha
+                <input type="date" id="b-fecha" required>
+              </label>
+              <div class="fila ancho">
+                <button type="submit" id="btn-confirmar" class="exito">Confirmar ✓</button>
+                <button type="button" id="btn-descartar">Descartar</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel span-4">
+          <div class="cabecera">
+            <h2 id="form-titulo">Alta manual</h2>
+            <button type="button" id="btn-cancelar-edicion" class="oculto">Cancelar edición</button>
+          </div>
+          <form id="form-manual" class="form">
+            <label>Tipo
+              <select id="f-tipo">
+                <option value="gasto">Gasto</option>
+                <option value="ingreso">Ingreso</option>
+              </select>
+            </label>
+            <label>Monto
+              <input type="number" id="f-monto" step="0.01" min="0.01" required placeholder="0">
+            </label>
+            <label>Moneda
+              <select id="f-moneda"><option>CLP</option><option>USD</option></select>
+            </label>
+            <label>Categoría
+              <select id="f-cat"></select>
+            </label>
+            <label>Fecha
+              <input type="date" id="f-fecha" required>
+            </label>
+            <label class="ancho">Descripción
+              <input type="text" id="f-desc" maxlength="2000" placeholder="Opcional">
+            </label>
+            <div class="ancho">
+              <button type="submit" id="btn-guardar" class="primario">Guardar</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel span-8">
+          <div class="cabecera">
+            <h2>Transacciones</h2>
+            <div class="filtros">
+              <select id="filtro-tipo" aria-label="Filtrar por tipo">
+                <option value="">Todos</option>
+                <option value="gasto">Gastos</option>
+                <option value="ingreso">Ingresos</option>
+              </select>
+              <select id="filtro-cat" aria-label="Filtrar por categoría">
+                <option value="">Todas las categorías</option>
+              </select>
+            </div>
+          </div>
+          <ul id="lista" class="lista"></ul>
+        </section>
+
       </div>
-      <ul id="lista" class="lista"></ul>
-      <p id="lista-vacia" class="vacio oculto">Sin movimientos en este período.</p>
-    </section>
+    </div>
+
+    <!-- ============ Resumen de Ingresos ============ -->
+    <div class="vista oculto" id="vista-ingresos" role="tabpanel" aria-label="Resumen de Ingresos">
+      <div class="layout">
+        <section class="panel kpi span-4">
+          <span class="kpi-label">Ingresos del mes</span>
+          <strong id="kpi-ingresos" class="verde">$0</strong>
+          <span class="suave" id="kpi-ingresos-sub"></span>
+        </section>
+        <section class="panel span-8">
+          <div class="cabecera"><h2>Ingresos por categoría</h2></div>
+          <div id="barras-ingresos" class="barras"></div>
+        </section>
+        <section class="panel span-12">
+          <div class="cabecera"><h2>Movimientos de ingresos</h2></div>
+          <ul id="lista-ingresos" class="lista"></ul>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============ Resumen de Gastos ============ -->
+    <div class="vista oculto" id="vista-gastos" role="tabpanel" aria-label="Resumen de Gastos">
+      <div class="layout">
+        <section class="panel kpi span-4">
+          <span class="kpi-label">Gastos del mes</span>
+          <strong id="kpi-gastos" class="rojo">$0</strong>
+          <span class="suave" id="kpi-gastos-sub"></span>
+        </section>
+        <section class="panel span-8">
+          <div class="cabecera"><h2>Gastos por categoría</h2></div>
+          <div id="barras-gastos" class="barras"></div>
+        </section>
+        <section class="panel span-12">
+          <div class="cabecera"><h2>Movimientos de gastos</h2></div>
+          <ul id="lista-gastos" class="lista"></ul>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============ Pestañas en preparación ============ -->
+    <div class="vista oculto" id="vista-ahorros" role="tabpanel" aria-label="Ahorros">
+      <div class="layout">
+        <section class="panel span-12">
+          <h2>Ahorros</h2>
+          <p class="vacio">Próximamente: tasa de ahorro del mes, meta de ahorro
+            e histórico de los últimos 12 meses.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="vista oculto" id="vista-cuentas" role="tabpanel" aria-label="Mis Cuentas">
+      <div class="layout">
+        <section class="panel span-12">
+          <h2>Mis Cuentas</h2>
+          <p class="vacio">Próximamente: tus cuentas y balances
+            (Efectivo, Cuenta Corriente, Tarjeta…).</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="vista oculto" id="vista-presupuestos" role="tabpanel" aria-label="Presupuestos">
+      <div class="layout">
+        <section class="panel span-12">
+          <h2>Presupuestos</h2>
+          <p class="vacio">Próximamente: límites mensuales por categoría
+            con alertas al superar el 80%.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="vista oculto" id="vista-metas" role="tabpanel" aria-label="Metas">
+      <div class="layout">
+        <section class="panel span-12">
+          <h2>Metas</h2>
+          <p class="vacio">Próximamente: metas de ahorro con barra de progreso.</p>
+        </section>
+      </div>
+    </div>
 
   </main>
 

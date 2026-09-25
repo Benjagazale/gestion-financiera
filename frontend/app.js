@@ -2,12 +2,17 @@
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
 let clave = localStorage.getItem("api_key") || "";
 let categorias = [];
 let borrador = null; // { draft, crid } pendiente de confirmar
 let listaCache = {}; // id -> transacción (para editar sin re-fetch)
 let editId = null;   // id en edición en el formulario manual
+
+// Pestañas (hash routing: #resumen, #ingresos, …) — sin framework
+const VISTAS = ["resumen", "ingresos", "gastos", "ahorros", "cuentas", "presupuestos", "metas"];
+let tabActual = "resumen";
 
 const fmtCLP = new Intl.NumberFormat("es-CL", {
   style: "currency", currency: "CLP", maximumFractionDigits: 0,
@@ -103,6 +108,36 @@ function mostrarApp() {
   $("#estado").textContent = "Conectado ✓";
 }
 
+// ---------------------------------------------------------------- Pestañas
+
+function tabDeHash() {
+  const h = location.hash.replace("#", "");
+  return VISTAS.includes(h) ? h : "resumen";
+}
+
+async function seleccionarTab(id) {
+  tabActual = id;
+  $$(".vista").forEach((v) => v.classList.toggle("oculto", v.id !== "vista-" + id));
+  $$(".tab").forEach((t) => {
+    const activa = t.dataset.tab === id;
+    t.classList.toggle("activa", activa);
+    t.setAttribute("aria-selected", String(activa));
+  });
+  if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
+  await cargarVista(id);
+}
+
+async function cargarVista(id) {
+  try {
+    if (id === "resumen") await refrescar();
+    else if (id === "ingresos") await cargarVistaTipo("ingreso");
+    else if (id === "gastos") await cargarVistaTipo("gasto");
+    // ahorros / cuentas / presupuestos / metas: paneles "próximamente" (sin carga)
+  } catch (err) {
+    toast(err.message || "Error cargando datos", true);
+  }
+}
+
 // ---------------------------------------------------------------- Carga
 
 async function cargarCategorias() {
@@ -134,14 +169,18 @@ async function cargarPorCategoria() {
     params.set("to", rango.to);
   }
   const filas = await api("/transactions/summary/by-category?" + params);
-  renderBarras(filas);
+  $("#cat-periodo").textContent = etiquetaPeriodo();
+  renderBarras($("#barras"), filas);
 }
 
-function renderBarras(filas) {
-  const cont = $("#barras");
+function renderBarras(cont, filas) {
   cont.innerHTML = "";
+  if (!filas.length) {
+    cont.innerHTML = '<p class="vacio">Sin movimientos en este período.</p>';
+    return;
+  }
   const top = filas.slice(0, 8);
-  const max = top.length ? top[0].total : 1;
+  const max = top[0].total;
   for (const f of top) {
     const fila = document.createElement("div");
     fila.className = "barra-fila";
@@ -152,8 +191,34 @@ function renderBarras(filas) {
       <span class="barra-track"><span class="barra-fill" style="width:${pct}%"></span></span>`;
     cont.appendChild(fila);
   }
-  $("#cat-periodo").textContent = etiquetaPeriodo();
-  $("#panel-categorias").classList.toggle("oculto", top.length === 0);
+}
+
+// Pestañas Ingresos / Gastos: KPI + barras + lista filtrados por tipo
+async function cargarVistaTipo(tipo) {
+  const pref = tipo === "gasto" ? "gastos" : "ingresos";
+  const rango = rangoMes();
+
+  const qsResumen = rango ? "?" + new URLSearchParams(rango) : "";
+  const paramsBarras = new URLSearchParams({ type: tipo });
+  const paramsLista = new URLSearchParams({ type: tipo, limit: "100", skip: "0" });
+  if (rango) {
+    paramsBarras.set("from", rango.from);
+    paramsBarras.set("to", rango.to);
+    paramsLista.set("from", rango.from);
+    paramsLista.set("to", rango.to);
+  }
+
+  const [resumen, barras, items] = await Promise.all([
+    api("/transactions/summary" + qsResumen),
+    api("/transactions/summary/by-category?" + paramsBarras),
+    api("/transactions?" + paramsLista),
+  ]);
+
+  const monto = tipo === "gasto" ? resumen.expenses : resumen.income;
+  $("#kpi-" + pref).textContent = fmtCLP.format(monto);
+  $("#kpi-" + pref + "-sub").textContent = etiquetaPeriodo();
+  renderBarras($("#barras-" + pref), barras);
+  renderLista($("#lista-" + pref), items);
 }
 
 async function cargarLista() {
@@ -168,21 +233,22 @@ async function cargarLista() {
   const c = $("#filtro-cat").value;
   if (c) params.set("category_id", c);
   const items = await api("/transactions?" + params);
-  renderLista(items);
+  renderLista($("#lista"), items);
 }
 
-function renderLista(items) {
-  const ul = $("#lista");
-  ul.innerHTML = "";
-  listaCache = {};
-  items.forEach((t) => (listaCache[t.id] = t));
+function renderLista(ul, items) {
+  const nuevos = [...items].reverse();
+  nuevos.forEach((t) => (listaCache[t.id] = t));
+
+  if (!nuevos.length) {
+    ul.innerHTML = '<li class="vacio">Sin movimientos en este período.</li>';
+    return;
+  }
 
   const nombres = {};
   categorias.forEach((c) => (nombres[c.id] = c.name));
 
-  const nuevos = [...items].reverse();
-  $("#lista-vacia").classList.toggle("oculto", nuevos.length > 0);
-
+  ul.innerHTML = "";
   for (const t of nuevos) {
     const cat = nombres[t.category_id] || "—";
     const monto =
@@ -340,11 +406,12 @@ async function guardarManual(ev) {
   }
 }
 
-// ---------------------------------------------------------------- Lista: editar/eliminar
+// ---------------------------------------------------------------- Listas: editar/eliminar
+// Delegación sobre #app: funciona en las 3 listas (resumen/ingresos/gastos)
 
-async function onListaClick(ev) {
+async function onAppClick(ev) {
   const btn = ev.target.closest("button");
-  if (!btn) return;
+  if (!btn || !btn.dataset || (!btn.dataset.edit && !btn.dataset.del)) return;
   if (btn.dataset.edit) {
     editar(parseInt(btn.dataset.edit, 10));
   } else if (btn.dataset.del) {
@@ -354,6 +421,7 @@ async function onListaClick(ev) {
       toast("Transacción eliminada ✓");
       if (editId === parseInt(btn.dataset.del, 10)) cancelarEdicion();
       await refrescar();
+      if (tabActual === "ingresos" || tabActual === "gastos") await cargarVista(tabActual);
     } catch (err) {
       toast(err.message || "Error al eliminar", true);
     }
@@ -384,13 +452,15 @@ async function conectar() {
 async function arrancar() {
   try {
     await cargarCategorias();
-    await refrescar();
-    mostrarApp();
   } catch (err) {
     if (!clave) return; // 401 ya mostró el setup
     mostrarApp();
-    toast(err.message || "Error cargando datos", true);
+    toast(err.message || "Error cargando categorías", true);
+    await seleccionarTab(tabDeHash());
+    return;
   }
+  mostrarApp();
+  await seleccionarTab(tabDeHash());
 }
 
 async function iniciar() {
@@ -427,9 +497,15 @@ $("#form-borrador").addEventListener("submit", confirmarBorrador);
 $("#btn-descartar").addEventListener("click", cerrarBorrador);
 $("#form-manual").addEventListener("submit", guardarManual);
 $("#btn-cancelar-edicion").addEventListener("click", cancelarEdicion);
-$("#lista").addEventListener("click", onListaClick);
-$("#mes").addEventListener("change", () => refrescar().catch((e) => toast(e.message, true)));
+$("#app").addEventListener("click", onAppClick);
+$("#mes").addEventListener("change", () => {
+  cargarVista(tabActual).catch((e) => toast(e.message, true));
+});
 $("#filtro-tipo").addEventListener("change", () => cargarLista().catch((e) => toast(e.message, true)));
 $("#filtro-cat").addEventListener("change", () => cargarLista().catch((e) => toast(e.message, true)));
+window.addEventListener("hashchange", () => {
+  const h = tabDeHash();
+  if (h !== tabActual) seleccionarTab(h);
+});
 
 iniciar();

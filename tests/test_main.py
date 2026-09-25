@@ -228,6 +228,15 @@ class TestFrontend:
         assert response.status_code == 404
         assert error_of(response)["code"] == "NOT_FOUND"
 
+    def test_index_has_tab_navigation(self, client):
+        """Navegación por pestañas: las 7 secciones obligatorias existen."""
+        response = client.get("/")
+        assert response.status_code == 200
+        for tab in ("resumen", "ingresos", "gastos", "ahorros", "cuentas",
+                    "presupuestos", "metas"):
+            assert f'data-tab="{tab}"' in response.text, tab
+            assert f'id="vista-{tab}"' in response.text, tab
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)
