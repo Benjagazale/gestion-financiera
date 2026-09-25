@@ -293,6 +293,16 @@ class TestFrontend:
         assert ".lista.agrupada" in css
         assert ".toggle button.activo" in css
 
+    def test_layout_ancho_y_responsive(self, client):
+        """Sesión E: ancho ≥80% del viewport en cualquier pantalla + breakpoints."""
+        css = client.get("/styles.css").text
+        assert css.count("width: 96vw") >= 2, "header y main deben usar 96vw"
+        assert "min(1600px" not in css, "cap fijo rompe el ≥80% en pantallas ≥2000px"
+        for bp in ("1199px", "767px", "540px"):
+            assert f"@media (max-width: {bp})" in css, bp
+        html = client.get("/").text
+        assert 'name="viewport"' in html
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)

@@ -45,7 +45,7 @@ body {
   border-bottom: 1px solid var(--borde);
 }
 .top-inner {
-  width: min(1600px, 96vw);
+  width: 96vw; /* ≥80% del viewport en cualquier ancho de pantalla */
   margin-inline: auto;
   display: flex;
   align-items: center;
@@ -91,7 +91,7 @@ body {
 
 /* ---------- Contenedor ancho: ≥80% del viewport, responsivo ---------- */
 main {
-  width: min(1600px, 96vw);
+  width: 96vw; /* ≥80% del viewport en cualquier ancho de pantalla */
   margin-inline: auto;
   padding: 1.1rem 0 4rem;
   display: grid;
