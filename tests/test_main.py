@@ -303,6 +303,24 @@ class TestFrontend:
         html = client.get("/").text
         assert 'name="viewport"' in html
 
+    def test_columnas_kanban_sin_desbordes_y_forms_normalizados(self, client):
+        """Fix UX: columnas con overflow controlado y registro en span-4."""
+        css = client.get("/styles.css").text
+        # Columna: recorte duro dentro de la caja de categoría
+        columna = css.split(".columna {", 1)[1].split("}", 1)[0]
+        assert "overflow: hidden" in columna
+        # Scroll interno con altura máxima en la lista de la columna
+        lista_int = css.split(".lista-int {", 1)[1].split("}", 1)[0]
+        assert "max-height" in lista_int and "overflow-y: auto" in lista_int
+        # Cadena min-width:0 (raíz del overflow horizontal por texto nowrap)
+        assert ".columna .item-izq > div" in css
+        assert "minmax(0, 1fr)" in css  # campos del form sin desborde
+        # Pestañas de tipo:6 slots en span-4 (2 Resumen +2 Ingresos +2 Gastos)
+        html = client.get("/").text
+        assert html.count('class="reg-slot span-4"') == 6
+        assert html.count('reg-slot span-6') == 0, "span-6 rompía la jerarquía"
+        assert html.count('panel span-12 panel-barras') == 2
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)

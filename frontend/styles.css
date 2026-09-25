@@ -119,6 +119,7 @@ main {
 
 @media (max-width: 1199px) {
   .span-4, .span-8 { grid-column: span 6; }   /* 2 columnas en tablet */
+  .panel-barras { grid-column: span 6; }      /* tablet: empareja con Alta manual */
 }
 @media (max-width: 767px) {
   .span-4, .span-8, .span-12 { grid-column: span 12; }  /* 1 columna en móvil */
@@ -256,7 +257,7 @@ textarea { resize: vertical; }
 .fila input { flex: 1; min-width: 140px; }
 
 /* Formularios */
-.form, .form-borrador { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+.form, .form-borrador { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
 .form label, .form-borrador label {
   font-size: .8rem;
   color: var(--texto-suave);
@@ -367,6 +368,7 @@ textarea { resize: vertical; }
   border-radius: 11px;
   padding: .55rem;
   min-width: 0;
+  overflow: hidden; /* garantía: nada pinta fuera de la caja de categoría */
 }
 .col-cab {
   display: flex;
@@ -398,12 +400,28 @@ textarea { resize: vertical; }
   padding: .03rem .42rem;
 }
 .col-total { font-size: .8rem; color: var(--texto-suave); white-space: nowrap; }
-.lista-int { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
-/* Tarjeta compacta en columna: fila1 badge+descripción, fila2 monto+acciones */
-.columna .item { flex-wrap: wrap; gap: .35rem .6rem; }
-.columna .item-izq { flex: 1 1 100%; }
-.columna .item-der { flex: 1 1 100%; justify-content: space-between; }
-.columna .item-desc { max-width: 100%; }
+.lista-int {
+  list-style: none;
+  margin: 0;
+  padding: 0 .15rem 0 0;
+  display: grid;
+  gap: .5rem;
+  min-width: 0;
+  max-height: min(60vh, 560px); /* altura máxima de la columna… */
+  overflow-y: auto;             /* …con scroll interno controlado */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+/* Tarjeta compacta en columna: fila1 badge+descripción, fila2 monto+acciones.
+   Cadena min-width:0 + overflow: el texto nowrap se corta con elipsis DENTRO
+   de la caja (raíz del desborde horizontal: sin esto, el min-content del
+   texto expandía la tarjeta más allá del track de la columna). */
+.columna .item { flex-wrap: wrap; gap: .35rem .6rem; min-width: 0; }
+.columna .item-izq { flex: 1 1 100%; min-width: 0; }
+.columna .item-izq > div { min-width: 0; }   /* envoltor de descripción+meta */
+.columna .item-der { flex: 1 1 100%; justify-content: space-between; min-width: 0; }
+.columna .item-desc { max-width: 100%; min-width: 0; width: 100%; }
+.columna .item-der strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .vacio {
   color: var(--texto-suave);
