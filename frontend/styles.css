@@ -323,6 +323,88 @@ textarea { resize: vertical; }
 .acciones button { padding: .3rem .45rem; font-size: .9rem; border-color: transparent; background: transparent; }
 .acciones button:hover { border-color: var(--acento-hover); color: var(--texto); }
 
+/* Toggle de vista: Por categoría (kanban) | Lista */
+.toggle {
+  display: inline-flex;
+  background: var(--elevado);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.toggle button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: .42rem .8rem;
+  font-size: .82rem;
+  color: var(--texto-suave);
+}
+.toggle button + button { border-left: 1px solid var(--borde); }
+.toggle button:hover:not(.activo) {
+  color: var(--texto);
+  background: color-mix(in srgb, var(--acento-hover) 25%, transparent);
+}
+.toggle button.activo {
+  background: var(--acento);
+  color: var(--texto);
+  font-weight: 600;
+}
+
+/* Lista agrupada: columnas por categoría (kanban horizontal) */
+.lista.agrupada {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: .7rem;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: .35rem;
+  scrollbar-width: thin;
+}
+.columna {
+  background: var(--elevado);
+  border: 1px solid var(--borde);
+  border-radius: 11px;
+  padding: .55rem;
+  min-width: 0;
+}
+.col-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding-bottom: .45rem;
+  margin-bottom: .5rem;
+  border-bottom: 1px solid var(--borde);
+}
+.col-titulo {
+  font-size: .82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-count {
+  font-size: .68rem;
+  font-weight: 500;
+  color: var(--texto-suave);
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: .03rem .42rem;
+}
+.col-total { font-size: .8rem; color: var(--texto-suave); white-space: nowrap; }
+.lista-int { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+/* Tarjeta compacta en columna: fila1 badge+descripción, fila2 monto+acciones */
+.columna .item { flex-wrap: wrap; gap: .35rem .6rem; }
+.columna .item-izq { flex: 1 1 100%; }
+.columna .item-der { flex: 1 1 100%; justify-content: space-between; }
+.columna .item-desc { max-width: 100%; }
+
 .vacio {
   color: var(--texto-suave);
   text-align: center;

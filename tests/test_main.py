@@ -277,6 +277,22 @@ class TestFrontend:
         assert 'prefijo: "ingresos", tipo: "ingreso"' in js
         assert 'prefijo: "gastos", tipo: "gasto"' in js
 
+    def test_vista_agrupada_con_toggle(self, client):
+        """Sesión D: toggle [Por categoría | Lista] en las3 listas + renderAgrupado."""
+        html = client.get("/").text
+        assert html.count('class="toggle"') == 3, "los3 listas deben tener toggle"
+        assert html.count('data-vista="agrupado"') == 3
+        assert html.count('data-vista="lista"') == 3
+
+        js = client.get("/app.js").text
+        assert "function renderAgrupado" in js
+        # por defecto la vista es la agrupada
+        assert 'localStorage.getItem("vista_mov") || "agrupado"' in js
+
+        css = client.get("/styles.css").text
+        assert ".lista.agrupada" in css
+        assert ".toggle button.activo" in css
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)

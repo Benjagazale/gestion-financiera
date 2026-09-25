@@ -88,6 +88,10 @@
               <select id="filtro-cat" aria-label="Filtrar por categoría">
                 <option value="">Todas las categorías</option>
               </select>
+              <div class="toggle" role="group" aria-label="Vista de movimientos">
+                <button type="button" data-vista="agrupado">Por categoría</button>
+                <button type="button" data-vista="lista">Lista</button>
+              </div>
             </div>
           </div>
           <ul id="lista" class="lista"></ul>
@@ -111,7 +115,13 @@
         <div class="reg-slot span-6" data-slot="ingresos-rapido"></div>
         <div class="reg-slot span-6" data-slot="ingresos-manual"></div>
         <section class="panel span-12">
-          <div class="cabecera"><h2>Movimientos de ingresos</h2></div>
+          <div class="cabecera">
+            <h2>Movimientos de ingresos</h2>
+            <div class="toggle" role="group" aria-label="Vista de movimientos">
+              <button type="button" data-vista="agrupado">Por categoría</button>
+              <button type="button" data-vista="lista">Lista</button>
+            </div>
+          </div>
           <ul id="lista-ingresos" class="lista"></ul>
         </section>
       </div>
@@ -132,7 +142,13 @@
         <div class="reg-slot span-6" data-slot="gastos-rapido"></div>
         <div class="reg-slot span-6" data-slot="gastos-manual"></div>
         <section class="panel span-12">
-          <div class="cabecera"><h2>Movimientos de gastos</h2></div>
+          <div class="cabecera">
+            <h2>Movimientos de gastos</h2>
+            <div class="toggle" role="group" aria-label="Vista de movimientos">
+              <button type="button" data-vista="agrupado">Por categoría</button>
+              <button type="button" data-vista="lista">Lista</button>
+            </div>
+          </div>
           <ul id="lista-gastos" class="lista"></ul>
         </section>
       </div>

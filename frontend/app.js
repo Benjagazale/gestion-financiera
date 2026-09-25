@@ -9,6 +9,7 @@ let categorias = [];
 let borrador = null; // { draft, crid } pendiente de confirmar
 let listaCache = {}; // id -> transacción (para editar sin re-fetch)
 let editId = null;   // id en edición en el formulario manual
+let vistaMov = localStorage.getItem("vista_mov") || "agrupado"; // "agrupado" | "lista"
 
 // Pestañas (hash routing: #resumen, #ingresos, …) — sin framework
 const VISTAS = ["resumen", "ingresos", "gastos", "ahorros", "cuentas", "presupuestos", "metas"];
@@ -241,25 +242,30 @@ async function cargarLista() {
 function renderLista(ul, items) {
   const nuevos = [...items].reverse();
   nuevos.forEach((t) => (listaCache[t.id] = t));
-
+  ul.className = "lista";
   if (!nuevos.length) {
     ul.innerHTML = '<li class="vacio">Sin movimientos en este período.</li>';
     return;
   }
+  if (vistaMov === "agrupado") renderAgrupado(ul, nuevos);
+  else renderFilas(ul, nuevos);
+}
 
+function nombresCategorias() {
   const nombres = {};
   categorias.forEach((c) => (nombres[c.id] = c.name));
+  return nombres;
+}
 
-  ul.innerHTML = "";
-  for (const t of nuevos) {
-    const cat = nombres[t.category_id] || "—";
-    const monto =
-      t.currency === "USD" && t.amount_clp != null
-        ? `US$ ${Number(t.amount).toLocaleString("es-CL")} → ${fmtCLP.format(t.amount_clp)}`
-        : fmtCLP.format(t.amount_clp != null ? t.amount_clp : t.amount);
-    const li = document.createElement("li");
-    li.className = "item " + t.type;
-    li.innerHTML = `
+function filaItem(t, nombres) {
+  const cat = nombres[t.category_id] || "—";
+  const monto =
+    t.currency === "USD" && t.amount_clp != null
+      ? `US$ ${Number(t.amount).toLocaleString("es-CL")} → ${fmtCLP.format(t.amount_clp)}`
+      : fmtCLP.format(t.amount_clp != null ? t.amount_clp : t.amount);
+  const li = document.createElement("li");
+  li.className = "item " + t.type;
+  li.innerHTML = `
       <div class="item-izq">
         <span class="badge">${t.type === "gasto" ? "Gasto" : "Ingreso"}</span>
         <div>
@@ -276,8 +282,53 @@ function renderLista(ul, items) {
           <button type="button" title="Eliminar" data-del="${t.id}">🗑️</button>
         </span>
       </div>`;
-    ul.appendChild(li);
+  return li;
+}
+
+function renderFilas(ul, items) {
+  const nombres = nombresCategorias();
+  ul.innerHTML = "";
+  for (const t of items) ul.appendChild(filaItem(t, nombres));
+}
+
+// Vista agrupada: columnas por categoría (kanban horizontal), ordenadas
+// por monto total absoluto; agrupación100% client-side por category_id.
+function renderAgrupado(ul, items) {
+  const nombres = nombresCategorias();
+  const grupos = new Map();
+  for (const t of items) {
+    const id = t.category_id ?? null;
+    if (!grupos.has(id)) grupos.set(id, []);
+    grupos.get(id).push(t);
   }
+  const columnas = [...grupos.entries()]
+    .map(([id, filas]) => {
+      const total = filas.reduce(
+        (s, t) =>
+          s + (t.amount_clp != null ? t.amount_clp : t.amount) * (t.type === "gasto" ? -1 : 1),
+        0
+      );
+      return { id, nombre: nombres[id] || "Sin Categorizar", filas, total };
+    })
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total) || a.nombre.localeCompare(b.nombre));
+
+  ul.className = "lista agrupada";
+  ul.innerHTML = columnas
+    .map(
+      (col) => `
+    <li class="columna">
+      <div class="col-cab">
+        <span class="col-titulo">${iconoCategoria(col.id)} ${esc(col.nombre)}<span class="col-count">${col.filas.length}</span></span>
+        <span class="col-total">${fmtCLP.format(Math.abs(col.total))}</span>
+      </div>
+      <ul class="lista-int"></ul>
+    </li>`
+    )
+    .join("");
+  const contenedores = ul.querySelectorAll(".lista-int");
+  columnas.forEach((col, i) => {
+    for (const t of col.filas) contenedores[i].appendChild(filaItem(t, nombres));
+  });
 }
 
 async function refrescar() {
@@ -548,11 +599,27 @@ async function guardarManual(ev) {
 }
 
 // ---------------------------------------------------------------- Listas: editar/eliminar
-// Delegación sobre #app: funciona en las 3 listas (resumen/ingresos/gastos)
+// Delegación sobre #app: funciona en las3 listas y en los3 toggles de vista
+
+function sincronizarToggle() {
+  $$(".toggle [data-vista]").forEach((b) => {
+    const activo = b.dataset.vista === vistaMov;
+    b.classList.toggle("activo", activo);
+    b.setAttribute("aria-pressed", String(activo));
+  });
+}
 
 async function onAppClick(ev) {
   const btn = ev.target.closest("button");
-  if (!btn || !btn.dataset || (!btn.dataset.edit && !btn.dataset.del)) return;
+  if (!btn || !btn.dataset) return;
+  if (btn.dataset.vista) {
+    vistaMov = btn.dataset.vista === "lista" ? "lista" : "agrupado";
+    localStorage.setItem("vista_mov", vistaMov);
+    sincronizarToggle();
+    await cargarVista(tabActual); // re-renderiza la lista visible
+    return;
+  }
+  if (!btn.dataset.edit && !btn.dataset.del) return;
   if (btn.dataset.edit) {
     editar(parseInt(btn.dataset.edit, 10));
   } else if (btn.dataset.del) {
@@ -605,6 +672,7 @@ async function arrancar() {
 
 async function iniciar() {
   montarRegistros(); //3 paneles de registro (Resumen / Ingresos / Gastos)
+  sincronizarToggle(); // estado del toggle [Por categoría | Lista]
   $("#mes").value = hoyLocal().mes;
   $("#estado").textContent = "Conectando…";
 
