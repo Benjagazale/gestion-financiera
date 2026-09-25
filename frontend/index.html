@@ -72,76 +72,9 @@
           <div id="barras" class="barras"></div>
         </section>
 
-        <section class="panel span-4">
-          <h2>Registro rápido ✨</h2>
-          <textarea id="texto-ia" rows="2"
-            placeholder="Ej: Pagué 4500 en la micro al trabajo"></textarea>
-          <button id="btn-analizar" class="primario">Analizar</button>
-
-          <div id="borrador" class="borrador oculto">
-            <h3>Borrador — ajusta lo que haga falta y confirma</h3>
-            <form id="form-borrador" class="form-borrador">
-              <label class="ancho">Descripción
-                <input type="text" id="b-desc" maxlength="2000" placeholder="Opcional">
-              </label>
-              <label>Tipo
-                <select id="b-tipo">
-                  <option value="gasto">Gasto</option>
-                  <option value="ingreso">Ingreso</option>
-                </select>
-              </label>
-              <label>Monto
-                <input type="number" id="b-monto" step="0.01" min="0.01" required>
-              </label>
-              <label>Moneda
-                <select id="b-moneda"><option>CLP</option><option>USD</option></select>
-              </label>
-              <label>Categoría
-                <select id="b-cat"></select>
-              </label>
-              <label>Fecha
-                <input type="date" id="b-fecha" required>
-              </label>
-              <div class="fila ancho">
-                <button type="submit" id="btn-confirmar" class="exito">Confirmar ✓</button>
-                <button type="button" id="btn-descartar">Descartar</button>
-              </div>
-            </form>
-          </div>
-        </section>
-
-        <section class="panel span-4">
-          <div class="cabecera">
-            <h2 id="form-titulo">Alta manual</h2>
-            <button type="button" id="btn-cancelar-edicion" class="oculto">Cancelar edición</button>
-          </div>
-          <form id="form-manual" class="form">
-            <label>Tipo
-              <select id="f-tipo">
-                <option value="gasto">Gasto</option>
-                <option value="ingreso">Ingreso</option>
-              </select>
-            </label>
-            <label>Monto
-              <input type="number" id="f-monto" step="0.01" min="0.01" required placeholder="0">
-            </label>
-            <label>Moneda
-              <select id="f-moneda"><option>CLP</option><option>USD</option></select>
-            </label>
-            <label>Categoría
-              <select id="f-cat"></select>
-            </label>
-            <label>Fecha
-              <input type="date" id="f-fecha" required>
-            </label>
-            <label class="ancho">Descripción
-              <input type="text" id="f-desc" maxlength="2000" placeholder="Opcional">
-            </label>
-            <div class="ancho">
-              <button type="submit" id="btn-guardar" class="primario">Guardar</button>
-            </div>
-          </form>
-        </section>
+        <!-- Registro rápido + Alta manual: slots que reemplaza crearPanelRegistro() -->
+        <div class="reg-slot span-4" data-slot="resumen-rapido"></div>
+        <div class="reg-slot span-4" data-slot="resumen-manual"></div>
 
         <section class="panel span-8">
           <div class="cabecera">
@@ -175,6 +108,8 @@
           <div class="cabecera"><h2>Ingresos por categoría</h2></div>
           <div id="barras-ingresos" class="barras"></div>
         </section>
+        <div class="reg-slot span-6" data-slot="ingresos-rapido"></div>
+        <div class="reg-slot span-6" data-slot="ingresos-manual"></div>
         <section class="panel span-12">
           <div class="cabecera"><h2>Movimientos de ingresos</h2></div>
           <ul id="lista-ingresos" class="lista"></ul>
@@ -194,6 +129,8 @@
           <div class="cabecera"><h2>Gastos por categoría</h2></div>
           <div id="barras-gastos" class="barras"></div>
         </section>
+        <div class="reg-slot span-6" data-slot="gastos-rapido"></div>
+        <div class="reg-slot span-6" data-slot="gastos-manual"></div>
         <section class="panel span-12">
           <div class="cabecera"><h2>Movimientos de gastos</h2></div>
           <ul id="lista-gastos" class="lista"></ul>

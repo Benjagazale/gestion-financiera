@@ -145,9 +145,11 @@ async function cargarCategorias() {
   const opciones = categorias
     .map((c) => `<option value="${c.id}">${iconoCategoria(c.id)} ${esc(c.name)}</option>`)
     .join("");
-  $("#f-cat").innerHTML = opciones;
-  $("#b-cat").innerHTML = opciones;
   $("#filtro-cat").innerHTML = '<option value="">Todas las categorías</option>' + opciones;
+  for (const inst of Object.values(REGISTROS)) {
+    inst.r["f-cat"].innerHTML = opciones;
+    inst.r["b-cat"].innerHTML = opciones;
+  }
 }
 
 async function cargarResumen() {
@@ -282,17 +284,19 @@ async function refrescar() {
   await Promise.all([cargarResumen(), cargarLista(), cargarPorCategoria()]);
 }
 
-// ---------------------------------------------------------------- Borrador IA
+// ---------------------------------------------------------------- Borrador IA (por instancia)
 
-async function analizar() {
-  const texto = $("#texto-ia").value.trim();
+async function analizar(ev) {
+  const inst = instanciaDe(ev.currentTarget);
+  if (!inst) return;
+  const texto = inst.r.texto.value.trim();
   if (!texto) return;
-  const btn = $("#btn-analizar");
+  const btn = inst.r.analizar;
   btn.disabled = true;
   btn.textContent = "Analizando…";
   try {
     const r = await api("/transactions/parse", { method: "POST", body: { text: texto } });
-    borrador = { draft: r.draft, crid: crypto.randomUUID() }; // mismo crid en reintentos → idempotente
+    borrador = { draft: r.draft, crid: crypto.randomUUID(), prefijo: inst.prefijo }; // mismo crid en reintentos → idempotente
     renderBorrador();
   } catch (err) {
     toast(err.message || "Error al analizar", true);
@@ -304,39 +308,43 @@ async function analizar() {
 
 function renderBorrador() {
   const d = borrador.draft;
-  $("#b-tipo").value = d.type;
-  $("#b-monto").value = d.amount;
-  $("#b-moneda").value = d.currency;
-  $("#b-cat").value = String(d.category_id);
-  $("#b-fecha").value = d.transaction_date;
-  $("#b-desc").value = d.description || "";
-  $("#borrador").classList.remove("oculto");
-  $("#borrador").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const inst = REGISTROS[borrador.prefijo];
+  if (!inst) return;
+  inst.r["b-tipo"].value = d.type;
+  inst.r["b-monto"].value = d.amount;
+  inst.r["b-moneda"].value = d.currency;
+  inst.r["b-cat"].value = String(d.category_id);
+  inst.r["b-fecha"].value = d.transaction_date;
+  inst.r["b-desc"].value = d.description || "";
+  inst.r.borrador.classList.remove("oculto");
+  inst.r.borrador.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function confirmarBorrador(ev) {
   ev.preventDefault();
   if (!borrador) return;
-  const btn = $("#btn-confirmar");
+  const inst = instanciaDe(ev.currentTarget);
+  if (!inst) return;
+  const btn = inst.r.confirmar;
   btn.disabled = true;
   try {
     await api("/transactions/confirm", {
       method: "POST",
       body: {
-        type: $("#b-tipo").value,
-        amount: parseFloat($("#b-monto").value),
-        currency: $("#b-moneda").value,
-        category_id: parseInt($("#b-cat").value, 10),
+        type: inst.r["b-tipo"].value,
+        amount: parseFloat(inst.r["b-monto"].value),
+        currency: inst.r["b-moneda"].value,
+        category_id: parseInt(inst.r["b-cat"].value, 10),
         merchant: borrador.draft.merchant || null,
-        description: $("#b-desc").value.trim() || null,
-        transaction_date: $("#b-fecha").value,
+        description: inst.r["b-desc"].value.trim() || null,
+        transaction_date: inst.r["b-fecha"].value,
         client_request_id: borrador.crid, // mismo id en reintentos → idempotente
       },
     });
     toast("Movimiento registrado ✓");
+    inst.r.texto.value = "";
     cerrarBorrador();
-    $("#texto-ia").value = "";
-    await refrescar();
+    await cargarVista(tabActual);
   } catch (err) {
     toast(err.message || "Error al confirmar", true);
   } finally {
@@ -345,46 +353,179 @@ async function confirmarBorrador(ev) {
 }
 
 function cerrarBorrador() {
+  if (borrador) {
+    const inst = REGISTROS[borrador.prefijo];
+    if (inst) inst.r.borrador.classList.add("oculto");
+  }
   borrador = null;
-  $("#borrador").classList.add("oculto");
+}
+
+// ---------------------------------------------------------------- Registro (factory)
+// Panel "Registro rápido + Alta manual": una sola fuente de markup en JS,
+// instanciada en Resumen / Ingresos / Gastos. Sin IDs duplicados:
+// el HTML solo aporta slots (data-slot) y el markup usa data-role.
+
+const REGISTROS = {}; // prefijo -> { prefijo, tipo, r: {data-role -> nodo} }
+
+function instanciaDe(el) {
+  const sec = el.closest("[data-registro]");
+  return sec ? REGISTROS[sec.dataset.registro] : null;
+}
+
+function crearPanelRegistro({ prefijo, tipo = "" }) {
+  const sel = tipo || "gasto"; // tipo por defecto del formulario manual
+
+  const rapido = document.createElement("section");
+  rapido.className = "panel";
+  rapido.dataset.registro = prefijo;
+  rapido.innerHTML = `
+    <h2>Registro rápido ✨</h2>
+    <textarea data-role="texto" rows="2"
+      placeholder="Ej: Pagué 4500 en la micro al trabajo"></textarea>
+    <button data-role="analizar" class="primario">Analizar</button>
+    <div data-role="borrador" class="borrador oculto">
+      <h3>Borrador — ajusta lo que haga falta y confirma</h3>
+      <form data-role="form-borrador" class="form-borrador">
+        <label class="ancho">Descripción
+          <input type="text" data-role="b-desc" maxlength="2000" placeholder="Opcional">
+        </label>
+        <label>Tipo
+          <select data-role="b-tipo">
+            <option value="gasto">Gasto</option>
+            <option value="ingreso">Ingreso</option>
+          </select>
+        </label>
+        <label>Monto
+          <input type="number" data-role="b-monto" step="0.01" min="0.01" required>
+        </label>
+        <label>Moneda
+          <select data-role="b-moneda"><option>CLP</option><option>USD</option></select>
+        </label>
+        <label>Categoría
+          <select data-role="b-cat"></select>
+        </label>
+        <label>Fecha
+          <input type="date" data-role="b-fecha" required>
+        </label>
+        <div class="fila ancho">
+          <button type="submit" data-role="confirmar" class="exito">Confirmar ✓</button>
+          <button type="button" data-role="descartar">Descartar</button>
+        </div>
+      </form>
+    </div>`;
+
+  const manual = document.createElement("section");
+  manual.className = "panel";
+  manual.dataset.registro = prefijo;
+  manual.innerHTML = `
+    <div class="cabecera">
+      <h2 data-role="titulo">Alta manual</h2>
+      <button type="button" data-role="cancelar" class="oculto">Cancelar edición</button>
+    </div>
+    <form data-role="form-manual" class="form">
+      <label>Tipo
+        <select data-role="f-tipo">
+          <option value="gasto"${sel === "gasto" ? " selected" : ""}>Gasto</option>
+          <option value="ingreso"${sel === "ingreso" ? " selected" : ""}>Ingreso</option>
+        </select>
+      </label>
+      <label>Monto
+        <input type="number" data-role="f-monto" step="0.01" min="0.01" required placeholder="0">
+      </label>
+      <label>Moneda
+        <select data-role="f-moneda"><option>CLP</option><option>USD</option></select>
+      </label>
+      <label>Categoría
+        <select data-role="f-cat"></select>
+      </label>
+      <label>Fecha
+        <input type="date" data-role="f-fecha" required>
+      </label>
+      <label class="ancho">Descripción
+        <input type="text" data-role="f-desc" maxlength="2000" placeholder="Opcional">
+      </label>
+      <div class="ancho">
+        <button type="submit" data-role="guardar" class="primario">Guardar</button>
+      </div>
+    </form>`;
+
+  const slotRapido = document.querySelector(`[data-slot="${prefijo}-rapido"]`);
+  const slotManual = document.querySelector(`[data-slot="${prefijo}-manual"]`);
+  if (!slotRapido || !slotManual) return null;
+
+  // El span (columnas del grid) lo decide el slot en el HTML
+  for (const [panel, slot] of [[rapido, slotRapido], [manual, slotManual]]) {
+    const span = [...slot.classList].filter((c) => c.startsWith("span-"));
+    if (span.length) panel.classList.add(...span);
+    slot.replaceWith(panel);
+  }
+
+  const inst = { prefijo, tipo, r: {} };
+  for (const panel of [rapido, manual]) {
+    panel.querySelectorAll("[data-role]").forEach((n) => (inst.r[n.dataset.role] = n));
+  }
+  inst.r.analizar.addEventListener("click", analizar);
+  inst.r["form-borrador"].addEventListener("submit", confirmarBorrador);
+  inst.r.descartar.addEventListener("click", cerrarBorrador);
+  inst.r["form-manual"].addEventListener("submit", guardarManual);
+  inst.r.cancelar.addEventListener("click", cancelarEdicion);
+  inst.r["f-fecha"].value = hoyLocal().dia;
+
+  REGISTROS[prefijo] = inst;
+  return inst;
+}
+
+function montarRegistros() {
+  crearPanelRegistro({ prefijo: "resumen" });
+  crearPanelRegistro({ prefijo: "ingresos", tipo: "ingreso" });
+  crearPanelRegistro({ prefijo: "gastos", tipo: "gasto" });
 }
 
 // ---------------------------------------------------------------- Manual / edición
+// La edición usa el panel de la pestaña activa: las listas solo existen en
+// resumen/ingresos/gastos, que son justamente las pestañas con registro.
 
 function editar(id) {
   const t = listaCache[id];
-  if (!t) return;
+  const inst = REGISTROS[tabActual];
+  if (!t || !inst) return;
   editId = id;
-  $("#form-titulo").textContent = `Editar transacción #${id}`;
-  $("#btn-cancelar-edicion").classList.remove("oculto");
-  $("#f-tipo").value = t.type;
-  $("#f-monto").value = t.amount;
-  $("#f-moneda").value = t.currency;
-  $("#f-cat").value = t.category_id || "";
-  $("#f-fecha").value = t.transaction_date;
-  $("#f-desc").value = t.description || "";
-  $("#form-manual").scrollIntoView({ behavior: "smooth" });
+  inst.r.titulo.textContent = `Editar transacción #${id}`;
+  inst.r.cancelar.classList.remove("oculto");
+  inst.r["f-tipo"].value = t.type;
+  inst.r["f-monto"].value = t.amount;
+  inst.r["f-moneda"].value = t.currency;
+  inst.r["f-cat"].value = t.category_id || "";
+  inst.r["f-fecha"].value = t.transaction_date;
+  inst.r["f-desc"].value = t.description || "";
+  inst.r["form-manual"].scrollIntoView({ behavior: "smooth" });
 }
 
 function cancelarEdicion() {
   editId = null;
-  $("#form-titulo").textContent = "Alta manual";
-  $("#btn-cancelar-edicion").classList.add("oculto");
-  $("#form-manual").reset();
-  $("#f-fecha").value = hoyLocal().dia;
+  // Resetea las 3 instancias; el `selected` del markup restaura el tipo por defecto
+  for (const inst of Object.values(REGISTROS)) {
+    inst.r.titulo.textContent = "Alta manual";
+    inst.r.cancelar.classList.add("oculto");
+    inst.r["form-manual"].reset();
+    inst.r["f-fecha"].value = hoyLocal().dia;
+  }
 }
 
 async function guardarManual(ev) {
   ev.preventDefault();
-  const btn = $("#btn-guardar");
+  const form = ev.currentTarget;
+  const inst = instanciaDe(form);
+  if (!inst) return;
+  const btn = inst.r.guardar;
   btn.disabled = true;
   const payload = {
-    type: $("#f-tipo").value,
-    amount: parseFloat($("#f-monto").value),
-    currency: $("#f-moneda").value,
-    category_id: $("#f-cat").value ? parseInt($("#f-cat").value) : null,
-    description: $("#f-desc").value.trim() || null,
-    transaction_date: $("#f-fecha").value,
+    type: inst.r["f-tipo"].value,
+    amount: parseFloat(inst.r["f-monto"].value),
+    currency: inst.r["f-moneda"].value,
+    category_id: inst.r["f-cat"].value ? parseInt(inst.r["f-cat"].value) : null,
+    description: inst.r["f-desc"].value.trim() || null,
+    transaction_date: inst.r["f-fecha"].value,
   };
   try {
     if (editId) {
@@ -395,10 +536,10 @@ async function guardarManual(ev) {
       payload.client_request_id = crypto.randomUUID();
       await api("/transactions", { method: "POST", body: payload });
       toast("Transacción guardada ✓");
-      $("#form-manual").reset();
-      $("#f-fecha").value = hoyLocal().dia;
+      form.reset();
+      inst.r["f-fecha"].value = hoyLocal().dia;
     }
-    await refrescar();
+    await cargarVista(tabActual);
   } catch (err) {
     toast(err.message || "Error al guardar", true);
   } finally {
@@ -420,8 +561,7 @@ async function onAppClick(ev) {
       await api("/transactions/" + btn.dataset.del, { method: "DELETE" });
       toast("Transacción eliminada ✓");
       if (editId === parseInt(btn.dataset.del, 10)) cancelarEdicion();
-      await refrescar();
-      if (tabActual === "ingresos" || tabActual === "gastos") await cargarVista(tabActual);
+      await cargarVista(tabActual); // refresca la pestaña visible (resumen/ingresos/gastos)
     } catch (err) {
       toast(err.message || "Error al eliminar", true);
     }
@@ -464,7 +604,7 @@ async function arrancar() {
 }
 
 async function iniciar() {
-  $("#f-fecha").value = hoyLocal().dia;
+  montarRegistros(); //3 paneles de registro (Resumen / Ingresos / Gastos)
   $("#mes").value = hoyLocal().mes;
   $("#estado").textContent = "Conectando…";
 
@@ -492,11 +632,7 @@ $("#btn-conectar").addEventListener("click", conectar);
 $("#clave-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") conectar();
 });
-$("#btn-analizar").addEventListener("click", analizar);
-$("#form-borrador").addEventListener("submit", confirmarBorrador);
-$("#btn-descartar").addEventListener("click", cerrarBorrador);
-$("#form-manual").addEventListener("submit", guardarManual);
-$("#btn-cancelar-edicion").addEventListener("click", cancelarEdicion);
+// Registro rápido / alta manual: listeners por instancia (crearPanelRegistro)
 $("#app").addEventListener("click", onAppClick);
 $("#mes").addEventListener("change", () => {
   cargarVista(tabActual).catch((e) => toast(e.message, true));

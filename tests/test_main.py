@@ -261,6 +261,22 @@ class TestFrontend:
         for cat_id, ico in pares.items():
             assert f'{cat_id}: "{ico}"' in js, f"Falta el ícono de la categoría {cat_id}"
 
+    def test_registro_factory_en_las_tres_pestanas(self, client):
+        """Sesión C: crearPanelRegistro() con slots en Resumen, Ingresos y Gastos."""
+        html = client.get("/").text
+        for prefijo in ("resumen", "ingresos", "gastos"):
+            assert f'data-slot="{prefijo}-rapido"' in html, prefijo
+            assert f'data-slot="{prefijo}-manual"' in html, prefijo
+        # El markup vive en el factory (app.js): sin IDs duplicados en el HTML
+        for id_viejo in ("form-manual", "btn-guardar", "btn-analizar", "texto-ia",
+                         "b-cat", "f-cat", "form-borrador"):
+            assert f'id="{id_viejo}"' not in html, id_viejo
+
+        js = client.get("/app.js").text
+        assert "function crearPanelRegistro" in js
+        assert 'prefijo: "ingresos", tipo: "ingreso"' in js
+        assert 'prefijo: "gastos", tipo: "gasto"' in js
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)
