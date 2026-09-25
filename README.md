@@ -12,8 +12,9 @@ FASE 2 (deploy Render Free) · FASE 3 (multiusuario + chat + frontend).
 |---|---|---|
 | GET | `/health` | Estado (sin API key) |
 | GET | `/` | **Interfaz web** (SPA: resumen, alta, borrador IA, lista) |
-| GET | `/transactions` | Listado (`skip`, `limit`, `type`, `category_id`) |
+| GET | `/transactions` | Listado (`skip`, `limit`, `type`, `category_id`, `?from=&to=`) |
 | GET | `/transactions/summary` | `income`/`expenses`/`balance` vía SQL (`?from=&to=`) |
+| GET | `/transactions/summary/by-category` | Top por categoría (`?from=&to=&type=`) |
 | GET/PUT/DELETE | `/transactions/{id}` | Lectura / edición parcial / borrado |
 | POST | `/transactions` | Alta manual (idempotente con `client_request_id`) |
 | POST | `/transactions/parse` | IA → **borrador** (no persiste) |

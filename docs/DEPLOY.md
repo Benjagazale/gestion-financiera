@@ -77,6 +77,8 @@ que lo usa.
 ## 6. Seguridad en producción
 
 - `API_KEY` **siempre definido** en Render (si se vacía, la API queda abierta).
+- `ENABLE_DOCS` **sin definir** en Render → `/docs`, `/redoc` y `/openapi.json` responden 404
+  (el contrato de la API no queda expuesto). Para activarlos en local: `ENABLE_DOCS=true` en `.env`.
 - `.env` nunca se sube al repo (solo `.env.example` con placeholders).
 - Cuando exista frontend: restringir `CORS_ORIGINS` al dominio real
   (actualmente `*`, aceptable mientras no haya navegador exponiendo claves).

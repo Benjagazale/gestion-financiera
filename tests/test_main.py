@@ -230,6 +230,36 @@ class TestFrontend:
 
 
 # ===========================================================================
+# 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)
+# ===========================================================================
+
+class TestDocsAndPrivacy:
+
+    def test_index_declares_noindex(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "noindex" in response.text
+
+    def test_docs_disabled_returns_envelope_404(self):
+        app_off = main.crear_app(enable_docs=False)
+        with TestClient(app_off) as cliente:
+            for ruta in ("/docs", "/redoc", "/openapi.json"):
+                response = cliente.get(ruta)
+                assert response.status_code == 404, ruta
+                assert error_of(response)["code"] == "NOT_FOUND"
+
+    def test_docs_enabled_with_flag(self):
+        app_on = main.crear_app(enable_docs=True)
+        with TestClient(app_on) as cliente:
+            response = cliente.get("/docs")
+            assert response.status_code == 200
+            assert "swagger" in response.text.lower()
+            response = cliente.get("/openapi.json")
+            assert response.status_code == 200
+            assert "openapi" in response.json()
+
+
+# ===========================================================================
 # 1. GET /transactions — paginación y filtros
 # ===========================================================================
 

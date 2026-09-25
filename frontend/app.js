@@ -34,6 +34,22 @@ function esc(s) {
   ));
 }
 
+// Período activo (selector de mes): null = sin filtro (todo)
+function rangoMes() {
+  const valor = $("#mes").value;
+  if (!valor) return null;
+  const [a, m] = valor.split("-").map(Number);
+  const ultimo = new Date(a, m, 0).getDate();
+  return { from: `${valor}-01`, to: `${valor}-${String(ultimo).padStart(2, "0")}` };
+}
+
+function etiquetaPeriodo() {
+  const valor = $("#mes").value;
+  if (!valor) return "todos los períodos";
+  const [a, m] = valor.split("-").map(Number);
+  return new Date(a, m - 1, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+}
+
 // ---------------------------------------------------------------- API
 
 async function api(ruta, { method = "GET", body } = {}) {
@@ -95,18 +111,14 @@ async function cargarCategorias() {
     .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`)
     .join("");
   $("#f-cat").innerHTML = opciones;
+  $("#b-cat").innerHTML = opciones;
   $("#filtro-cat").innerHTML = '<option value="">Todas las categorías</option>' + opciones;
 }
 
 async function cargarResumen() {
-  const mes = $("#mes").value || hoyLocal().mes;
-  const [a, m] = mes.split("-").map(Number);
-  const ultimo = new Date(a, m, 0).getDate();
-  const params = new URLSearchParams({
-    from: `${mes}-01`,
-    to: `${mes}-${String(ultimo).padStart(2, "0")}`,
-  });
-  const r = await api("/transactions/summary?" + params);
+  const rango = rangoMes();
+  const qs = rango ? "?" + new URLSearchParams(rango) : "";
+  const r = await api("/transactions/summary" + qs);
   $("#ingresos").textContent = fmtCLP.format(r.income);
   $("#gastos").textContent = fmtCLP.format(r.expenses);
   const balance = $("#balance");
@@ -114,8 +126,43 @@ async function cargarResumen() {
   balance.className = r.balance < 0 ? "neg" : "";
 }
 
+async function cargarPorCategoria() {
+  const params = new URLSearchParams({ type: "gasto" });
+  const rango = rangoMes();
+  if (rango) {
+    params.set("from", rango.from);
+    params.set("to", rango.to);
+  }
+  const filas = await api("/transactions/summary/by-category?" + params);
+  renderBarras(filas);
+}
+
+function renderBarras(filas) {
+  const cont = $("#barras");
+  cont.innerHTML = "";
+  const top = filas.slice(0, 8);
+  const max = top.length ? top[0].total : 1;
+  for (const f of top) {
+    const fila = document.createElement("div");
+    fila.className = "barra-fila";
+    const pct = Math.max(4, Math.round((f.total / max) * 100));
+    fila.innerHTML = `
+      <span class="barra-nombre">${esc(f.category_name)}<span class="barra-meta">${f.count} op.</span></span>
+      <strong>${fmtCLP.format(f.total)}</strong>
+      <span class="barra-track"><span class="barra-fill" style="width:${pct}%"></span></span>`;
+    cont.appendChild(fila);
+  }
+  $("#cat-periodo").textContent = etiquetaPeriodo();
+  $("#panel-categorias").classList.toggle("oculto", top.length === 0);
+}
+
 async function cargarLista() {
   const params = new URLSearchParams({ limit: "100", skip: "0" });
+  const rango = rangoMes();
+  if (rango) {
+    params.set("from", rango.from);
+    params.set("to", rango.to);
+  }
   const t = $("#filtro-tipo").value;
   if (t) params.set("type", t);
   const c = $("#filtro-cat").value;
@@ -166,7 +213,7 @@ function renderLista(items) {
 }
 
 async function refrescar() {
-  await Promise.all([cargarResumen(), cargarLista()]);
+  await Promise.all([cargarResumen(), cargarLista(), cargarPorCategoria()]);
 }
 
 // ---------------------------------------------------------------- Borrador IA
@@ -191,50 +238,49 @@ async function analizar() {
 
 function renderBorrador() {
   const d = borrador.draft;
-  const nombres = {};
-  categorias.forEach((c) => (nombres[c.id] = c.name));
-  const monto =
-    d.currency === "USD"
-      ? `US$ ${d.amount} → ${fmtCLP.format(d.amount_clp)}`
-      : fmtCLP.format(d.amount);
-  $("#borrador-desc").textContent = d.description || "";
-  $("#borrador-datos").innerHTML = `
-    <li><span>Tipo</span><strong>${d.type === "gasto" ? "Gasto" : "Ingreso"}</strong></li>
-    <li><span>Monto</span><strong>${monto}</strong></li>
-    <li><span>Categoría</span><strong>${esc(nombres[d.category_id] || d.category_name || "—")}</strong></li>
-    <li><span>Fecha</span><strong>${fechaLinda(d.transaction_date)}</strong></li>`;
+  $("#b-tipo").value = d.type;
+  $("#b-monto").value = d.amount;
+  $("#b-moneda").value = d.currency;
+  $("#b-cat").value = String(d.category_id);
+  $("#b-fecha").value = d.transaction_date;
+  $("#b-desc").value = d.description || "";
   $("#borrador").classList.remove("oculto");
+  $("#borrador").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-async function confirmarBorrador() {
+async function confirmarBorrador(ev) {
+  ev.preventDefault();
   if (!borrador) return;
   const btn = $("#btn-confirmar");
   btn.disabled = true;
-  const d = borrador.draft;
   try {
     await api("/transactions/confirm", {
       method: "POST",
       body: {
-        type: d.type,
-        amount: d.amount,
-        currency: d.currency,
-        category_id: d.category_id,
-        merchant: d.merchant || null,
-        description: d.description,
-        transaction_date: d.transaction_date,
-        client_request_id: borrador.crid,
+        type: $("#b-tipo").value,
+        amount: parseFloat($("#b-monto").value),
+        currency: $("#b-moneda").value,
+        category_id: parseInt($("#b-cat").value, 10),
+        merchant: borrador.draft.merchant || null,
+        description: $("#b-desc").value.trim() || null,
+        transaction_date: $("#b-fecha").value,
+        client_request_id: borrador.crid, // mismo id en reintentos → idempotente
       },
     });
     toast("Movimiento registrado ✓");
-    borrador = null;
-    $("#borrador").classList.add("oculto");
+    cerrarBorrador();
     $("#texto-ia").value = "";
     await refrescar();
   } catch (err) {
-    toast(err.message || "Error al confirmar", true); // reintento usa el mismo crid
+    toast(err.message || "Error al confirmar", true);
   } finally {
     btn.disabled = false;
   }
+}
+
+function cerrarBorrador() {
+  borrador = null;
+  $("#borrador").classList.add("oculto");
 }
 
 // ---------------------------------------------------------------- Manual / edición
@@ -337,7 +383,8 @@ async function conectar() {
 
 async function arrancar() {
   try {
-    await Promise.all([cargarCategorias(), cargarResumen(), cargarLista()]);
+    await cargarCategorias();
+    await refrescar();
     mostrarApp();
   } catch (err) {
     if (!clave) return; // 401 ya mostró el setup
@@ -376,11 +423,8 @@ $("#clave-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") conectar();
 });
 $("#btn-analizar").addEventListener("click", analizar);
-$("#btn-confirmar").addEventListener("click", confirmarBorrador);
-$("#btn-descartar").addEventListener("click", () => {
-  borrador = null;
-  $("#borrador").classList.add("oculto");
-});
+$("#form-borrador").addEventListener("submit", confirmarBorrador);
+$("#btn-descartar").addEventListener("click", cerrarBorrador);
 $("#form-manual").addEventListener("submit", guardarManual);
 $("#btn-cancelar-edicion").addEventListener("click", cancelarEdicion);
 $("#lista").addEventListener("click", onListaClick);

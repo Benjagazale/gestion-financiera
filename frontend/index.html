@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
   <title>Agente Financiero</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
@@ -39,6 +40,17 @@
         <div class="tarjeta"><span>Gastos</span><strong id="gastos" class="rojo">$0</strong></div>
         <div class="tarjeta"><span>Balance</span><strong id="balance">$0</strong></div>
       </div>
+      <p class="ayuda">El mes seleccionado filtra también la lista y los gastos por categoría
+        (bórralo para ver todo).</p>
+    </section>
+
+    <!-- Gastos por categoría -->
+    <section class="panel oculto" id="panel-categorias">
+      <div class="cabecera">
+        <h2>Gastos por categoría</h2>
+        <span class="suave" id="cat-periodo"></span>
+      </div>
+      <div id="barras" class="barras"></div>
     </section>
 
     <!-- Registro rápido con IA -->
@@ -49,13 +61,34 @@
       <button id="btn-analizar" class="primario">Analizar</button>
 
       <div id="borrador" class="borrador oculto">
-        <h3>Borrador — revísalo antes de confirmar</h3>
-        <p id="borrador-desc" class="borrador-texto"></p>
-        <ul id="borrador-datos" class="datos"></ul>
-        <div class="fila">
-          <button id="btn-confirmar" class="exito">Confirmar ✓</button>
-          <button id="btn-descartar">Descartar</button>
-        </div>
+        <h3>Borrador — ajusta lo que haga falta y confirma</h3>
+        <form id="form-borrador" class="form-borrador">
+          <label class="ancho">Descripción
+            <input type="text" id="b-desc" maxlength="2000" placeholder="Opcional">
+          </label>
+          <label>Tipo
+            <select id="b-tipo">
+              <option value="gasto">Gasto</option>
+              <option value="ingreso">Ingreso</option>
+            </select>
+          </label>
+          <label>Monto
+            <input type="number" id="b-monto" step="0.01" min="0.01" required>
+          </label>
+          <label>Moneda
+            <select id="b-moneda"><option>CLP</option><option>USD</option></select>
+          </label>
+          <label>Categoría
+            <select id="b-cat"></select>
+          </label>
+          <label>Fecha
+            <input type="date" id="b-fecha" required>
+          </label>
+          <div class="fila ancho">
+            <button type="submit" id="btn-confirmar" class="exito">Confirmar ✓</button>
+            <button type="button" id="btn-descartar">Descartar</button>
+          </div>
+        </form>
       </div>
     </section>
 
@@ -109,7 +142,7 @@
         </div>
       </div>
       <ul id="lista" class="lista"></ul>
-      <p id="lista-vacia" class="vacio oculto">Sin movimientos.</p>
+      <p id="lista-vacia" class="vacio oculto">Sin movimientos en este período.</p>
     </section>
 
   </main>

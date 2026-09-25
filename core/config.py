@@ -35,5 +35,9 @@ class Settings:
     # el refresh automático desde una API es una mejora futura)
     fx_usd_clp: Decimal = Decimal(os.getenv("FX_USD_CLP", "950"))
 
+    # Documentación interactiva (/docs, /redoc, /openapi.json): OFF por defecto
+    # (en producción no se expone el contrato). Activar en local con ENABLE_DOCS=true.
+    enable_docs: bool = os.getenv("ENABLE_DOCS", "false").lower() in ("1", "true", "yes")
+
 
 settings = Settings()

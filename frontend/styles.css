@@ -74,6 +74,8 @@ main { max-width: 760px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem
 .filtros { display: flex; gap: .5rem; flex-wrap: wrap; }
 
 .oculto { display: none !important; }
+.suave { color: var(--suave); font-size: .82rem; font-weight: 400; }
+.ayuda { color: var(--suave); font-size: .76rem; margin: .7rem 0 0; }
 
 /* Tarjetas de resumen */
 .tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
@@ -89,6 +91,32 @@ main { max-width: 760px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem
 .verde { color: var(--verde); }
 .rojo { color: var(--rojo); }
 .neg { color: var(--rojo); }
+
+/* Barras por categoría */
+.barras { display: grid; gap: .7rem; }
+.barra-fila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .25rem .75rem;
+  align-items: baseline;
+  font-size: .9rem;
+}
+.barra-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-meta { color: var(--suave); font-size: .74rem; margin-left: .45rem; }
+.barra-track {
+  grid-column: 1 / -1;
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.barra-fill {
+  display: block;
+  height: 100%;
+  background: var(--rojo);
+  border-radius: 999px;
+}
 
 /* Controles */
 button {
@@ -125,7 +153,7 @@ textarea { resize: vertical; }
 .form label { font-size: .82rem; color: var(--suave); display: grid; gap: .3rem; }
 .form .ancho { grid-column: 1 / -1; }
 
-/* Borrador IA */
+/* Borrador IA editable */
 .borrador {
   margin-top: 1rem;
   border: 1px dashed var(--primario);
@@ -134,10 +162,9 @@ textarea { resize: vertical; }
   background: color-mix(in srgb, var(--primario) 6%, transparent);
 }
 .borrador h3 { margin: 0 0 .5rem; font-size: .9rem; }
-.borrador-texto { margin: .2rem 0 .6rem; font-style: italic; color: var(--suave); }
-.borrador .datos { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
-.borrador .datos li { display: flex; justify-content: space-between; font-size: .92rem; }
-.borrador .datos span { color: var(--suave); }
+.form-borrador { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.form-borrador label { font-size: .8rem; color: var(--suave); display: grid; gap: .3rem; }
+.form-borrador .ancho { grid-column: 1 / -1; }
 
 /* Lista */
 .lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
@@ -194,6 +221,6 @@ textarea { resize: vertical; }
 
 @media (max-width: 540px) {
   .tarjetas { grid-template-columns: 1fr; }
-  .form { grid-template-columns: 1fr; }
+  .form, .form-borrador { grid-template-columns: 1fr; }
   .item-desc { max-width: 40vw; }
 }
