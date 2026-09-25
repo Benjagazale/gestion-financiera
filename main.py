@@ -1,8 +1,10 @@
 """Agente Financiero API — aplicación (middleware, error handlers, routers)."""
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config import settings
 from core.errors import register_error_handlers
@@ -35,3 +37,12 @@ def health_check():
     API_KEY llegó al proceso (no expone el valor, solo true/false).
     """
     return envelope({"status": "ok", "api_key_configured": bool(settings.api_key)})
+
+
+# Interfaz web (SPA estática) — montada al final para no sombrear rutas de la API.
+# Mismo origen: sin CORS y sin servicio extra (plan Free).
+app.mount(
+    "/",
+    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "frontend"), html=True),
+    name="frontend",
+)

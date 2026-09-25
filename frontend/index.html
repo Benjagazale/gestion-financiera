@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Agente Financiero</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>💸 Agente Financiero</h1>
+    <span id="estado" class="estado">Conectando…</span>
+  </header>
+
+  <!-- Pantalla de configuración (API key) -->
+  <section id="setup" class="panel oculto">
+    <h2>Conectar con la API</h2>
+    <p>Pega tu <strong>X-API-Key</strong> (Render → Environment → <code>API_KEY</code>).
+      Se guarda solo en este navegador.</p>
+    <div class="fila">
+      <input type="password" id="clave-input" placeholder="API key" autocomplete="off">
+      <button id="btn-conectar" class="primario">Conectar</button>
+    </div>
+    <p id="setup-msg" class="err"></p>
+  </section>
+
+  <main id="app" class="oculto">
+
+    <!-- Resumen -->
+    <section class="panel">
+      <div class="cabecera">
+        <h2>Resumen</h2>
+        <input type="month" id="mes" aria-label="Mes">
+      </div>
+      <div class="tarjetas">
+        <div class="tarjeta"><span>Ingresos</span><strong id="ingresos" class="verde">$0</strong></div>
+        <div class="tarjeta"><span>Gastos</span><strong id="gastos" class="rojo">$0</strong></div>
+        <div class="tarjeta"><span>Balance</span><strong id="balance">$0</strong></div>
+      </div>
+    </section>
+
+    <!-- Registro rápido con IA -->
+    <section class="panel">
+      <h2>Registro rápido ✨</h2>
+      <textarea id="texto-ia" rows="2"
+        placeholder="Ej: Pagué 4500 en la micro al trabajo"></textarea>
+      <button id="btn-analizar" class="primario">Analizar</button>
+
+      <div id="borrador" class="borrador oculto">
+        <h3>Borrador — revísalo antes de confirmar</h3>
+        <p id="borrador-desc" class="borrador-texto"></p>
+        <ul id="borrador-datos" class="datos"></ul>
+        <div class="fila">
+          <button id="btn-confirmar" class="exito">Confirmar ✓</button>
+          <button id="btn-descartar">Descartar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Alta manual / edición -->
+    <section class="panel">
+      <div class="cabecera">
+        <h2 id="form-titulo">Alta manual</h2>
+        <button type="button" id="btn-cancelar-edicion" class="oculto">Cancelar edición</button>
+      </div>
+      <form id="form-manual" class="form">
+        <label>Tipo
+          <select id="f-tipo">
+            <option value="gasto">Gasto</option>
+            <option value="ingreso">Ingreso</option>
+          </select>
+        </label>
+        <label>Monto
+          <input type="number" id="f-monto" step="0.01" min="0.01" required placeholder="0">
+        </label>
+        <label>Moneda
+          <select id="f-moneda"><option>CLP</option><option>USD</option></select>
+        </label>
+        <label>Categoría
+          <select id="f-cat"></select>
+        </label>
+        <label>Fecha
+          <input type="date" id="f-fecha" required>
+        </label>
+        <label class="ancho">Descripción
+          <input type="text" id="f-desc" maxlength="2000" placeholder="Opcional">
+        </label>
+        <div class="ancho">
+          <button type="submit" id="btn-guardar" class="primario">Guardar</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Lista -->
+    <section class="panel">
+      <div class="cabecera">
+        <h2>Transacciones</h2>
+        <div class="filtros">
+          <select id="filtro-tipo" aria-label="Filtrar por tipo">
+            <option value="">Todos</option>
+            <option value="gasto">Gastos</option>
+            <option value="ingreso">Ingresos</option>
+          </select>
+          <select id="filtro-cat" aria-label="Filtrar por categoría">
+            <option value="">Todas las categorías</option>
+          </select>
+        </div>
+      </div>
+      <ul id="lista" class="lista"></ul>
+      <p id="lista-vacia" class="vacio oculto">Sin movimientos.</p>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast oculto"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

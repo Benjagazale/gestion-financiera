@@ -208,6 +208,27 @@ class TestHealthAndContract:
         assert {c["name"] for c in data} >= {"Alimentación", "Transporte"}
 
 
+class TestFrontend:
+    """Interfaz web servida desde FastAPI (StaticFiles)."""
+
+    def test_index_served_as_html(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        assert "Agente Financiero" in response.text
+
+    def test_static_assets(self, client):
+        for ruta in ("/app.js", "/styles.css"):
+            response = client.get(ruta)
+            assert response.status_code == 200, ruta
+
+    def test_unknown_path_still_uses_error_envelope(self, client):
+        # El mount estático no rompe el contrato de 404
+        response = client.get("/pagina-que-no-existe")
+        assert response.status_code == 404
+        assert error_of(response)["code"] == "NOT_FOUND"
+
+
 # ===========================================================================
 # 1. GET /transactions — paginación y filtros
 # ===========================================================================
