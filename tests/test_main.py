@@ -247,6 +247,20 @@ class TestFrontend:
         for viejo in ("#012340", "#0367A6", "#0D8BD9", "#4AA2D9", "#79C4F2"):
             assert viejo not in css, f"Sobrevive la paleta anterior {viejo}"
 
+    def test_icons_served_before_app_and_cover_known_categories(self, client):
+        """Sesión B: icons.js se carga antes que app.js y cubre las categorías reales."""
+        html = client.get("/").text
+        assert html.index("/icons.js") < html.index("/app.js")
+
+        response = client.get("/icons.js")
+        assert response.status_code == 200
+        js = response.text
+        assert "iconoCategoria" in js
+        # Pares id → ícono de categorías existentes en Supabase
+        pares = {"1": "🥙", "2": "🚗", "7": "⚽", "12": "💼", "17": "📦"}
+        for cat_id, ico in pares.items():
+            assert f'{cat_id}: "{ico}"' in js, f"Falta el ícono de la categoría {cat_id}"
+
 
 # ===========================================================================
 # 0b. Privacidad: noindex de la UI + docs desactivables (Tanda B)

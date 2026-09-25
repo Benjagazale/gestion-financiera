@@ -143,7 +143,7 @@ async function cargarVista(id) {
 async function cargarCategorias() {
   categorias = await api("/categories");
   const opciones = categorias
-    .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`)
+    .map((c) => `<option value="${c.id}">${iconoCategoria(c.id)} ${esc(c.name)}</option>`)
     .join("");
   $("#f-cat").innerHTML = opciones;
   $("#b-cat").innerHTML = opciones;
@@ -186,7 +186,7 @@ function renderBarras(cont, filas) {
     fila.className = "barra-fila";
     const pct = Math.max(4, Math.round((f.total / max) * 100));
     fila.innerHTML = `
-      <span class="barra-nombre">${esc(f.category_name)}<span class="barra-meta">${f.count} op.</span></span>
+      <span class="barra-nombre">${iconoCategoria(f.category_id)} ${esc(f.category_name)}<span class="barra-meta">${f.count} op.</span></span>
       <strong>${fmtCLP.format(f.total)}</strong>
       <span class="barra-track"><span class="barra-fill" style="width:${pct}%"></span></span>`;
     cont.appendChild(fila);
@@ -262,7 +262,7 @@ function renderLista(ul, items) {
         <span class="badge">${t.type === "gasto" ? "Gasto" : "Ingreso"}</span>
         <div>
           <div class="item-desc">${esc(t.description || cat)}</div>
-          <div class="item-meta">${fechaLinda(t.transaction_date)} · ${esc(cat)}${
+          <div class="item-meta">${fechaLinda(t.transaction_date)} · ${iconoCategoria(t.category_id)} ${esc(cat)}${
             t.merchant ? " · " + esc(t.merchant) : ""
           }</div>
         </div>
